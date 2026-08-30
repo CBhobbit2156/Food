@@ -331,6 +331,21 @@ function adverseTimes(entries){
   });
   return out.sort(function(a,b){return a-b;});
 }
+/* Plain-English reading of one row. The rule is simple: if the "without it"
+   rate falls inside the band, the difference could be luck. */
+function verdict(r){
+  var lo=r.ci[0], hi=r.ci[1], c=r.control;
+  if(r.n<4) return {text:'Too few meals to say anything yet — needs about '+(4-r.n)+' more.', tone:'faint'};
+  if(c>=lo && c<=hi) return {text:'No clear difference. Symptoms follow this about as often as they follow anything else.', tone:'faint'};
+  if(lo>c){
+    var gap=lo-c;
+    return {text: gap>0.25
+      ? 'Symptoms follow this a lot more often than usual. The strongest signal a diary can give you.'
+      : 'Symptoms follow this more often than usual, but not dramatically.', tone:'bad'};
+  }
+  return {text:'Symptoms follow this LESS often than usual. Probably safe, or eaten on your calmer days.', tone:'ok'};
+}
+
 function median(a){
   var b=a.slice().sort(function(x,y){return x-y;});
   return b.length ? b[Math.floor(b.length/2)] : 0;
@@ -428,7 +443,7 @@ function parseLoose(text, open, close){
   }
   try{ return JSON.parse(repairJSON(t)); }catch(e){ return null; }
 }
-function askClaude(prompt){
+function askClaude(prompt, maxTokens){
   var key=getKey();
   if(!key) return Promise.reject(new Error('No API key set. Open Settings and paste one in.'));
   return fetch('https://api.anthropic.com/v1/messages',{
@@ -439,16 +454,19 @@ function askClaude(prompt){
       'anthropic-version':'2023-06-01',
       'anthropic-dangerous-direct-browser-access':'true'
     },
-    body:JSON.stringify({model:MODEL, max_tokens:1200, messages:[{role:'user',content:prompt}]})
+    body:JSON.stringify({model:MODEL, max_tokens:maxTokens||4000,
+                         messages:[{role:'user',content:prompt}]})
   }).then(function(r){ return r.json(); }).then(function(data){
     if(data.error) throw new Error(data.error.message || JSON.stringify(data.error));
-    return (data.content||[]).map(function(b){ return b && b.type==='text' ? b.text : ''; }).join('');
+    return {text:(data.content||[]).map(function(b){ return b && b.type==='text' ? b.text : ''; }).join(''),
+            stop:data.stop_reason||''};
   });
 }
 
 /* ---------------- constants ---------------- */
 var QTY=['a splash','a bite','small portion','normal portion','large portion','a glass','a bowl','seconds'];
-var SYMS=['Bloating','Gas','Cramping','Nausea','Reflux','Urgency','Headache','Low energy','Brain fog','Joint ache','Skin flare','Poor sleep'];
+var SYMS=['Bloating','Gas','Cramping','Nausea','Reflux','Urgency','Headache',
+  'Low energy','Brain fog','Poor sleep','Itching','Rash','Muscle soreness','Joint ache','Skin flare'];
 var SEV=['barely','mild','moderate','strong','severe'];
 var BRISTOL=['Separate hard lumps','Lumpy sausage','Sausage with cracks','Smooth soft sausage','Soft blobs, clear edges','Mushy, ragged edges','Watery, no solids'];
 var FLAGS=['Urgent','Straining','Incomplete','Painful','Mucus','Undigested food','Foul smelling','Floating'];
@@ -854,8 +872,8 @@ function estimateBatch(list, done, total){
     'Return ONLY JSON, no fences: [{"i":0,"ingredients":[{"name":"exact name as given","servings":0.2}]}]\n'+
     'Keep every ingredient name character-for-character as given. Include every ingredient listed.';
 
-  askClaude(prompt).then(function(text){
-    var arr=parseLoose(text,'[',']');
+  askClaude(prompt, 2500).then(function(resp){
+    var arr=parseLoose(resp.text,'[',']');
     if(!Array.isArray(arr)) throw new Error('unexpected reply');
     arr.forEach(function(r){
       var e=batch[r.i];
@@ -958,7 +976,8 @@ function mountComposer(slot){
   if(kind==='symptom'){
     h+='<div class="fld"><div class="lbl">What I felt <span>· pick as many as apply</span></div>'+
        '<div id="symChips" class="wrapflex"></div>'+
-       '<div class="row" style="margin-top:8px"><input id="customSym" placeholder="something else">'+
+       '<div class="lbl" style="margin-top:10px">Or type any symptom</div>'+
+       '<div class="row"><input id="customSym" placeholder="e.g. tingling hands">'+
        '<button class="mini" data-act="addSym" style="padding:0 14px">Add</button></div></div>';
     h+='<div class="fld" id="sevBlock"></div>';
     h+='<div class="fld"><div class="lbl">When it eased <span>· optional</span></div>'+
@@ -1127,7 +1146,7 @@ function saveDraft(){
 }
 
 /* ---------------- analysis ---------------- */
-var analysis={windowH:24, minDose:0.25, state:'idle', result:null, raw:'', err:''};
+var analysis={windowH:24, minDose:0.25, state:'idle', result:null, raw:'', err:'', tries:0, truncated:false};
 
 var INSTRUCTIONS =
 "You are analysing a personal food, stool and symptom diary to find candidate triggers. Reason like a careful GI dietitian.\n\n"+
@@ -1191,14 +1210,36 @@ function runAnalysis(){
     s.events+" events, baseline "+pc(s.baseRate)+" 95% CI "+pc(s.baseCI[0])+"-"+pc(s.baseCI[1])+"):\n"+table+
     "\n\nDIARY (chronological, 24h clock):\n"+logText();
 
-  askClaude(prompt).then(function(text){
-    analysis.raw=text;
-    var p=parseLoose(text);
+  askClaude(prompt, 4000).then(function(resp){
+    analysis.raw=resp.text;
+    analysis.truncated = (resp.stop==='max_tokens');
+    var p=parseLoose(resp.text);
+    var complete = p && p.overview && p.suspects;
+    if(complete){ analysis.result=p; analysis.state='done'; analysis.tries=0; renderModal(); return; }
+
+    // One automatic retry, asking for a tighter answer, before giving up.
+    if((analysis.tries||0) < 1){
+      analysis.tries=(analysis.tries||0)+1;
+      var tighter=prompt.replace(
+        'Max 4 suspects, 3 cleared, 2 gaps, 3 nextSteps',
+        'Max 2 suspects, 2 cleared, 1 gap, 2 nextSteps') +
+        '\n\nKeep the whole reply under 200 words. Complete every field. Close the JSON.';
+      return askClaude(tighter, 4000).then(function(r2){
+        analysis.raw=r2.text;
+        analysis.truncated=(r2.stop==='max_tokens');
+        var p2=parseLoose(r2.text);
+        if(p2 && (p2.overview||p2.suspects)){ analysis.result=p2; analysis.state='done'; }
+        else if(r2.text.trim()){ analysis.state='raw'; }
+        else throw new Error('empty response');
+        analysis.tries=0; renderModal();
+      });
+    }
     if(p && (p.overview||p.suspects)){ analysis.result=p; analysis.state='done'; }
-    else if(text.trim()){ analysis.state='raw'; }
+    else if(resp.text.trim()){ analysis.state='raw'; }
     else throw new Error('empty response');
-    renderModal();
+    analysis.tries=0; renderModal();
   }).catch(function(err){
+    analysis.tries=0;
     analysis.err=String(err && err.message || err);
     analysis.state='error'; renderModal();
   });
@@ -1235,10 +1276,30 @@ function renderModal(){
   if(!s.rows.length){
     h+='<p class="small muted">Nothing has been eaten twice yet, so there is nothing to compare.</p>';
   } else {
-    h+='<p class="tiny muted" style="margin:0 0 10px">Bar = 95% Wilson interval for the chance a symptom follows within '+
-      analysis.windowH+'h. Thick mark = observed rate. Thin line = rate when that ingredient is absent. '+
-      'If the thin line sits inside the bar, the data cannot tell it apart from chance. '+
-      'Rows marked "via" are components inferred from a composite food — ketchup contributes to tomato, vinegar and added sugar.</p>';
+    h+='<details style="margin:0 0 12px"><summary class="tiny" style="color:var(--muted)">'+
+      'How to read these bars</summary><div class="tiny muted" style="line-height:1.6;margin-top:8px">'+
+      '<p style="margin:0 0 8px"><b>The short version:</b> the shaded bar is the range of values '+
+      'consistent with what you have logged so far. The thin dark line is how often symptoms happen '+
+      'without that ingredient. If the line falls inside the bar, you cannot conclude anything yet.</p>'+
+      '<p style="margin:0 0 8px"><b>Why a range and not a number?</b> If a food was followed by symptoms '+
+      '2 times out of 3, the honest answer is not "67%". Three meals is almost nothing — the truth could '+
+      'easily be 30% or 90%. The bar shows that whole range of possibilities. It starts very wide and '+
+      'narrows as you log more meals. A wide bar means "we do not know yet", not "this is dangerous".</p>'+
+      '<p style="margin:0 0 8px"><b>What each shape means:</b><br>'+
+      '· <b>Thick mark</b> — what actually happened: symptoms followed this often.<br>'+
+      '· <b>Shaded bar</b> — the range the real rate is probably in, 95 times out of 100.<br>'+
+      '· <b>Thin dark line</b> — the same rate for meals without this ingredient. Your comparison point.</p>'+
+      '<p style="margin:0 0 8px"><b>Three examples:</b><br>'+
+      '· Bar spans 10–95% and the line sits in the middle → nothing learned yet, keep logging.<br>'+
+      '· Bar spans 55–90%, line at 20% → the bar sits entirely to the right of the line, so this is '+
+      'followed by symptoms far more often than usual. Worth testing by avoiding it.<br>'+
+      '· Bar spans 0–15%, line at 40% → followed by symptoms less often than usual. Likely fine.</p>'+
+      '<p style="margin:0"><b>One warning.</b> "Followed by symptoms" is not "caused symptoms". If you '+
+      'always eat two things together, both will look equally guilty and no amount of logging will '+
+      'separate them. The only way to tell is to eat one without the other.</p>'+
+      '</div></details>'+
+      '<p class="tiny faint" style="margin:0 0 10px">Rows marked "via" are components of a composite food — '+
+      'ketchup counts toward tomato, vinegar and added sugar.</p>';
     s.rows.slice(0,12).forEach(function(r){
       var via = (!r.literal && r.from.length) ? ' <span class="tiny faint">via '+esc(r.from.slice(0,3).join(', '))+'</span>' : '';
       h+='<div style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px">'+
@@ -1247,6 +1308,8 @@ function renderModal(){
         '<div class="bar"><div class="ci" style="left:'+(r.ci[0]*100)+'%;width:'+Math.max((r.ci[1]-r.ci[0])*100,1)+'%"></div>'+
         '<div class="pt" style="left:calc('+(r.rate*100)+'% - 1.5px)"></div>'+
         '<div class="ctl" style="left:'+(r.control*100)+'%"></div></div>'+
+        '<div class="tiny '+(verdict(r).tone==='bad'?'bad':verdict(r).tone==='ok'?'ok':'faint')+
+          '" style="margin-top:3px">'+esc(verdict(r).text)+'</div>'+
         (r.trace?'<div class="mono tiny faint" style="margin-top:3px">'+r.trace+' further meal'+
           (r.trace===1?'':'s')+' had only a trace, excluded</div>':'')+
         (r.dr?'<div class="mono tiny" style="margin-top:3px;color:var(--food)">dose-response: '+
@@ -1271,6 +1334,11 @@ function renderModal(){
     h+='<div class="sec"><div class="lbl">Interpretation (unstructured)</div><div class="card">'+
        '<p class="tiny muted">The reply didn\'t arrive in the expected structure, so here it is as written.</p>'+
        '<div style="white-space:pre-wrap" class="small">'+esc(analysis.raw)+'</div></div></div>';
+
+  if(analysis.truncated && (analysis.state==='done'||analysis.state==='raw')){
+    h+='<div class="banner" style="font-size:12px">The reply hit its length limit, so the report below '+
+       'may stop early. Press Analyze again for another go.</div>';
+  }
 
   if(analysis.state==='done' && analysis.result){
     var r=analysis.result;
@@ -1410,8 +1478,8 @@ document.addEventListener('click', function(ev){
     var note=document.getElementById('keynote');
     setKey(document.getElementById('apikey').value.trim());
     note.className='note faint'; note.textContent='Testing…';
-    askClaude('Reply with the single word: working')
-      .then(function(x){ note.className='note ok'; note.textContent='Key works — '+x.trim().slice(0,40); })
+    askClaude('Reply with the single word: working', 64)
+      .then(function(r){ note.className='note ok'; note.textContent='Key works — '+r.text.trim().slice(0,40); })
       .catch(function(e){ note.className='note bad'; note.textContent=String(e.message||e); });
   }
   else if(act==='export'){
@@ -1502,8 +1570,8 @@ function deduceAPI(btn){
     '- Never return abstract components: no fructan, lactose, gluten, histamine, capsaicin, nitrates, salt, spices.\n'+
     '- Do include a whole food the person may not have thought about but would accept on sight, such as the egg '+
     'in a pastry or the seed oil something was fried in.';
-  askClaude(prompt).then(function(text){
-    var arr=parseLoose(text,'[',']');
+  askClaude(prompt, 1500).then(function(r){
+    var arr=parseLoose(r.text,'[',']');
     if(!Array.isArray(arr)) throw new Error('unexpected reply');
     var have=d.ingredients.map(ingName), incoming=[];
     arr.forEach(function(x){
