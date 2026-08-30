@@ -1,0 +1,1544 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#141C1B">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" href="./icon-192.png">
+<link rel="apple-touch-icon" href="./icon-192.png">
+<title>Food &amp; Symptom Diary</title>
+<style>
+  :root{
+    --bg:#EEF1F0; --panel:#fff; --ink:#141C1B; --muted:#63736F; --faint:#8B9995;
+    --line:#D3DAD8; --food:#1F6B5B; --foodsoft:#DEEDE8; --sym:#8B3A5C;
+    --symsoft:#F3E2E9; --stool:#3A4E7A; --stoolsoft:#E1E6F1;
+    --display:'Iowan Old Style','Palatino Linotype',Palatino,Georgia,serif;
+    --body:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);
+       font-size:15px;line-height:1.45;padding-bottom:40px}
+  .wrap{max-width:680px;margin:0 auto;padding:16px}
+  h1{font-family:var(--display);font-size:28px;line-height:1.1;margin:0}
+  h2{font-family:var(--display);font-size:19px;margin:0}
+  .sub{font-family:var(--mono);font-size:11px;color:var(--faint);margin-top:4px}
+  .lbl{font-family:var(--mono);font-size:10px;letter-spacing:.08em;
+       text-transform:uppercase;color:var(--faint);margin-bottom:5px}
+  .lbl span{text-transform:none}
+  .row{display:flex;gap:8px}
+  .wrapflex{display:flex;flex-wrap:wrap;gap:5px}
+  button{font-family:var(--body);font-size:14px;cursor:pointer;border:none;
+         background:none;color:inherit;padding:0}
+  .btn{padding:11px 12px;border-radius:9px;color:#fff;display:flex;
+       align-items:center;justify-content:center;gap:6px;flex:1}
+  .btn.food{background:var(--food)} .btn.symptom{background:var(--sym)}
+  .btn.stool{background:var(--stool)}
+  .btn-out{padding:11px;border-radius:9px;border:1px solid var(--ink);
+           background:var(--panel);width:100%;margin-bottom:18px}
+  .mini{padding:5px 10px;border-radius:6px;font-size:12px;
+        border:1px solid var(--line);background:#fff;color:var(--muted)}
+  .mini.solid{background:var(--sym);color:#fff;border-color:var(--sym)}
+  .chip{padding:5px 9px;border-radius:999px;font-size:12px;border:1px solid var(--line);
+        background:#fff;color:var(--muted)}
+  .chip.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .chip.symptom{background:var(--symsoft);color:var(--sym);border-color:transparent}
+  .chip.symptom.on{background:var(--sym);color:#fff}
+  .chip.stool{background:var(--stoolsoft);color:var(--stool);border-color:transparent}
+  .chip.stool.on{background:var(--stool);color:#fff}
+  input,textarea{width:100%;background:#fff;border:1px solid var(--line);
+    border-radius:8px;padding:9px 10px;font-size:15px;color:var(--ink);
+    font-family:var(--body);outline:none}
+  textarea{min-height:54px;resize:vertical}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:9px;
+        padding:12px;margin-bottom:8px}
+  .card.food{border-left:3px solid var(--food)}
+  .card.symptom{border-left:3px solid var(--sym)}
+  .card.stool{border-left:3px solid var(--stool)}
+  .composer{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+            padding:16px;margin-bottom:16px}
+  .composer.food{border-top:3px solid var(--food)}
+  .composer.symptom{border-top:3px solid var(--sym)}
+  .composer.stool{border-top:3px solid var(--stool)}
+  .fld{margin-bottom:14px}
+  .time{font-family:var(--mono);font-size:12px;color:var(--muted);min-width:60px;padding-top:2px}
+  .tag{padding:2px 7px;border-radius:5px;font-size:11px;display:inline-block}
+  .tag.food{background:var(--foodsoft);color:var(--food)}
+  .tag.sym{background:var(--symsoft);color:var(--sym);font-size:13px}
+  .tag.stool{background:var(--stoolsoft);color:var(--stool)}
+  .rail{position:relative;height:30px;background:#fff;border:1px solid var(--line);
+        border-radius:6px}
+  .rail .grid{position:absolute;top:0;bottom:0;width:1px;background:var(--line)}
+  .ticks{display:flex;justify-content:space-between;font-family:var(--mono);
+         font-size:9px;color:var(--faint);margin-top:3px}
+  .num{flex:1;padding:7px 0;border-radius:6px;border:1px solid var(--line);
+       background:#fff;color:var(--muted);font-family:var(--mono);font-size:13px}
+  .num.on{color:#fff}
+  .note{font-family:var(--mono);font-size:11px;margin-top:6px}
+  .ok{color:var(--food)} .bad{color:var(--sym)}
+  .banner{background:var(--symsoft);color:var(--sym);border-radius:9px;
+          padding:12px;margin-bottom:16px;font-size:13px}
+  .modal{position:fixed;inset:0;background:var(--bg);overflow-y:auto;z-index:50}
+  .mhead{position:sticky;top:0;background:var(--ink);color:#fff;padding:12px 16px;
+         display:flex;justify-content:space-between;align-items:center}
+  .bar{position:relative;height:22px;background:#fff;border:1px solid var(--line);
+       border-radius:4px}
+  .bar .ci{position:absolute;top:6px;height:10px;background:var(--symsoft);border-radius:5px}
+  .bar .pt{position:absolute;top:4px;width:3px;height:14px;background:var(--sym);border-radius:2px}
+  .bar .ctl{position:absolute;top:0;bottom:0;width:1px;background:var(--ink);opacity:.45}
+  .muted{color:var(--muted)} .faint{color:var(--faint)}
+  .small{font-size:13px} .tiny{font-size:12px}
+  .mono{font-family:var(--mono)}
+  .sec{margin-bottom:22px}
+  .pill{padding:2px 8px;border-radius:999px;color:#fff;font-family:var(--mono);
+        font-size:9px;letter-spacing:.08em;text-transform:uppercase}
+  .icon{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2;
+        stroke-linecap:round;stroke-linejoin:round}
+  details summary{cursor:pointer}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+<div id="modal"></div>
+
+<script>
+/* ==================================================================
+   Food & Symptom Diary — standalone. No build step, no dependencies.
+   Data lives in this browser under STORAGE_KEY. Keep that string
+   stable across versions or saved entries are orphaned.
+================================================================== */
+var STORAGE_KEY = 'food-diary:entries';
+var KEY_API = 'food-diary:apikey';
+var MODEL = 'claude-sonnet-4-6';
+
+/* ---------------- storage ---------------- */
+var storageOK = true, storageWhy = '';
+
+function testStorage(){
+  try{
+    localStorage.setItem('food-diary:test','1');
+    if(localStorage.getItem('food-diary:test') !== '1') throw new Error('read-back mismatch');
+    localStorage.removeItem('food-diary:test');
+    return {ok:true};
+  }catch(e){ return {ok:false, why:String(e && e.message || e)}; }
+}
+
+function loadEntries(){
+  try{
+    var raw = localStorage.getItem(STORAGE_KEY);
+    if(!raw) return [];
+    var arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr.map(migrate).filter(Boolean) : [];
+  }catch(e){ return []; }
+}
+
+function saveEntries(){
+  if(!storageOK) return;
+  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state.entries)); }
+  catch(e){ storageOK = false; storageWhy = String(e && e.message || e); render(); }
+}
+
+function migrate(e){
+  if(!e || typeof e !== 'object') return null;
+  if(!e.kind) e.kind = 'food';
+  if(!Array.isArray(e.ingredients)) e.ingredients = [];
+  if(e.kind === 'symptom' && !Array.isArray(e.symptoms))
+    e.symptoms = e.symptom ? [{name:e.symptom, severity:e.severity||3}] : [];
+  if(e.kind === 'stool' && !Array.isArray(e.flags)) e.flags = [];
+  return e;
+}
+
+function getKey(){ try{ return localStorage.getItem(KEY_API) || ''; }catch(e){ return ''; } }
+function setKey(k){ try{ localStorage.setItem(KEY_API, k); }catch(e){} }
+
+
+/* ---------------- one-time recovery for the removed lock ----------------
+   The passphrase lock is gone. This only runs if a vault blob is sitting in
+   storage from the version that had it, so that data isn't stranded. Once
+   converted back to normal storage the blob is deleted and this never fires
+   again. Safe to delete this whole block if you never turned the lock on. */
+var VAULT_KEY='food-diary:vault';
+function vaultExists(){
+  try{ return !!localStorage.getItem(VAULT_KEY); }catch(e){ return false; }
+}
+function unb64(str){
+  var t=atob(str), b=new Uint8Array(t.length);
+  for(var i=0;i<t.length;i++) b[i]=t.charCodeAt(i);
+  return b;
+}
+function recoverVault(pass){
+  var blob=JSON.parse(localStorage.getItem(VAULT_KEY));
+  var enc=new TextEncoder();
+  return crypto.subtle.importKey('raw', enc.encode(pass), 'PBKDF2', false, ['deriveKey'])
+    .then(function(base){
+      return crypto.subtle.deriveKey(
+        {name:'PBKDF2', salt:unb64(blob.salt), iterations:blob.iter||210000, hash:'SHA-256'},
+        base, {name:'AES-GCM', length:256}, false, ['decrypt']);
+    })
+    .then(function(key){
+      return crypto.subtle.decrypt({name:'AES-GCM', iv:unb64(blob.iv)}, key, unb64(blob.ct));
+    })
+    .then(function(buf){
+      var data=JSON.parse(new TextDecoder().decode(buf));
+      state.entries=(data.entries||[]).map(migrate).filter(Boolean);
+      if(data.recipes) saveRecipes(data.recipes);
+      if(data.apiKey) setKey(data.apiKey);
+      saveEntries();
+      try{ localStorage.removeItem(VAULT_KEY); }catch(e){}
+    });
+}
+function renderRecovery(err){
+  document.getElementById('app').innerHTML=
+    '<div style="max-width:340px;margin:12vh auto 0;text-align:center">'+
+    '<h1 style="font-size:22px">Encrypted data found</h1>'+
+    '<p class="small muted" style="margin:8px 0 18px">This copy has data from the version with the '+
+    'passphrase lock. Enter it once and everything converts back to normal storage. The lock is gone '+
+    'after that.</p>'+
+    '<input id="passIn" type="password" placeholder="Passphrase" autofocus>'+
+    '<button class="btn food" data-act="unlock" style="margin-top:10px;width:100%">Convert</button>'+
+    (err?'<div class="note bad">'+esc(err)+'</div>':'')+'</div>';
+  var i=document.getElementById('passIn');
+  if(i) i.addEventListener('keydown', function(e){ if(e.key==='Enter') tryRecover(); });
+}
+function tryRecover(){
+  var el=document.getElementById('passIn'), pass=el?el.value:'';
+  if(!pass) return;
+  recoverVault(pass).then(function(){ render(); })
+    .catch(function(){ renderRecovery('Wrong passphrase.'); });
+}
+
+/* ---------------- time parsing ---------------- */
+var WEEKDAYS=['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
+var MONTHS=['january','february','march','april','may','june','july','august',
+            'september','october','november','december'];
+var MONTH_ALT='jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec';
+var NAMED={noon:[12,0],midday:[12,0],midnight:[0,0],breakfast:[8,0],brunch:[10,30],
+  lunch:[12,30],dinner:[19,0],supper:[19,0],morning:[8,0],afternoon:[14,0],
+  evening:[19,0],night:[21,0],bedtime:[22,30],waking:[7,0]};
+
+function monthIndex(t){ var x=t.slice(0,3); for(var i=0;i<12;i++) if(MONTHS[i].slice(0,3)===x) return i; return -1; }
+function startOfDay(d){ var x=new Date(d); x.setHours(0,0,0,0); return x; }
+
+function parseWhen(raw, now, anchor){
+  now = now || new Date();
+  if(!raw) return null;
+  var s = String(raw).toLowerCase().trim()
+    .replace(/,/g,' ').replace(/\bat\b/g,' ').replace(/\s+/g,' ').trim();
+  if(!s) return null;
+  if(/^(right\s*)?now$/.test(s) || s==='just now' || s==='currently') return now.getTime();
+
+  if(anchor){
+    var later = s.match(/^(?:(\d+(?:\.\d+)?)|an?)\s*(minutes?|mins?|m|hours?|hrs?|h)\s*(?:later|after|afterwards?)$/);
+    if(later){
+      var ln = later[1] ? parseFloat(later[1]) : 1;
+      return anchor + ln * (later[2][0]==='m' ? 60000 : 3600000);
+    }
+  }
+  var ago = s.match(/^(?:(\d+(?:\.\d+)?)|an?)\s*(minutes?|mins?|m|hours?|hrs?|h|days?|d)\s*ago$/);
+  if(ago){
+    var an = ago[1] ? parseFloat(ago[1]) : 1, u = ago[2][0];
+    return now.getTime() - an * (u==='m'?60000:u==='h'?3600000:86400000);
+  }
+
+  var anchored=false, yearGiven=false, day=startOfDay(now);
+  var iso   = s.match(/\b(\d{4})-(\d{1,2})-(\d{1,2})\b/);
+  var slash = s.match(/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/);
+  var dayFirst   = new RegExp('\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+('+MONTH_ALT+')[a-z]*\\.?(?:\\s+(\\d{4}))?\\b');
+  // (?!\s*:) stops "august 8:30" reading the hour as a day number
+  var monthFirst = new RegExp('\\b('+MONTH_ALT+')[a-z]*\\.?\\s+(\\d{1,2})(?!\\s*:)(?:st|nd|rd|th)?(?:\\s+(\\d{4}))?\\b');
+  var df = s.match(dayFirst);
+  var mf = df ? null : s.match(monthFirst);
+
+  if(iso){ day=new Date(+iso[1], +iso[2]-1, +iso[3]); anchored=true; yearGiven=true; s=s.replace(iso[0],' '); }
+  else if(df){ day=new Date(df[3]?+df[3]:now.getFullYear(), monthIndex(df[2]), +df[1]); anchored=true; yearGiven=!!df[3]; s=s.replace(df[0],' '); }
+  else if(mf){ day=new Date(mf[3]?+mf[3]:now.getFullYear(), monthIndex(mf[1]), +mf[2]); anchored=true; yearGiven=!!mf[3]; s=s.replace(mf[0],' '); }
+  else if(slash){
+    var y=now.getFullYear();
+    if(slash[3]) y = slash[3].length===2 ? 2000+ +slash[3] : +slash[3];
+    day=new Date(y, +slash[1]-1, +slash[2]); anchored=true; yearGiven=!!slash[3]; s=s.replace(slash[0],' ');
+  }
+
+  if(!anchored){
+    if(/\bday before yesterday\b/.test(s)){ day.setDate(day.getDate()-2); anchored=true; s=s.replace(/day before yesterday/,' '); }
+    else if(/\blast night\b/.test(s)){ day.setDate(day.getDate()-1); anchored=true; s=s.replace(/last night/,' night '); }
+    else if(/\byesterday\b/.test(s)){ day.setDate(day.getDate()-1); anchored=true; s=s.replace(/yesterday/,' '); }
+    else if(/\btoday\b|\btonight\b|\bthis\b/.test(s)){ anchored=true; s=s.replace(/today|this/g,' ').replace(/tonight/,' night '); }
+    else {
+      for(var i=0;i<7;i++){
+        var re=new RegExp('\\b(last\\s+)?'+WEEKDAYS[i]+'\\b'), m=s.match(re);
+        if(m){ var back=(now.getDay()-i+7)%7; if(back===0) back=m[1]?7:0;
+               day.setDate(day.getDate()-back); anchored=true; s=s.replace(re,' '); break; }
+      }
+    }
+  }
+
+  s=s.replace(/\s+/g,' ').trim();
+  var hour=null, minute=0;
+  var clock=s.match(/\b(\d{1,2})(?::(\d{2}))?\s*(a\.?m\.?|p\.?m\.?)\b/);
+  if(clock){ hour=+clock[1]%12; minute=clock[2]?+clock[2]:0; if(clock[3][0]==='p') hour+=12; }
+  else { var h24=s.match(/\b(\d{1,2}):(\d{2})\b/); if(h24){ hour=+h24[1]; minute=+h24[2]; } }
+  if(hour===null){
+    for(var k in NAMED){ if(new RegExp('\\b'+k+'\\b').test(s)){ hour=NAMED[k][0]; minute=NAMED[k][1]; break; } }
+  }
+  if(hour===null && anchored){
+    var bare=s.match(/\b(\d{1,2})\b/);
+    if(bare && +bare[1]<=23){ hour=+bare[1]; if(hour>=1 && hour<=7) hour+=12; }
+  }
+  if(hour===null && !anchored) return null;
+  if(hour===null){ hour=12; minute=0; }
+  if(hour>23 || minute>59) return null;
+
+  var out=new Date(day); out.setHours(hour,minute,0,0);
+  if(anchored && !yearGiven && out.getTime() > now.getTime()+86400000) out.setFullYear(out.getFullYear()-1);
+  if(!anchored && out.getTime() > now.getTime()+90000) out.setDate(out.getDate()-1);
+  if(anchor){ while(out.getTime() < anchor) out.setDate(out.getDate()+1); }
+  return out.getTime();
+}
+
+/* ---------------- formatting ---------------- */
+function fmtTime(t){ return new Date(t).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'}); }
+function fmtDay(t){ return new Date(t).toLocaleDateString([], {weekday:'long',month:'long',day:'numeric'}); }
+function fmtStamp(t){ return new Date(t).toLocaleString([], {weekday:'short',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}); }
+function relDay(t){
+  var d0=startOfDay(new Date()).getTime(), d=startOfDay(new Date(t)).getTime();
+  var n=Math.round((d0-d)/86400000);
+  return n===0?'Today':n===1?'Yesterday':(n>1&&n<7)?n+' days ago':'';
+}
+function fmtDur(ms){
+  var m=Math.round(ms/60000); if(m<60) return m+'m';
+  var h=Math.floor(m/60), r=m%60; return r? h+'h '+r+'m' : h+'h';
+}
+function pc(x){ return Math.round(x*100)+'%'; }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, function(c){
+  return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+
+/* ---------------- statistics ---------------- */
+function wilson(k,n,z){
+  z = z || 1.96;
+  if(!n) return [0,1];
+  var p=k/n, d=1+z*z/n, c=p+z*z/(2*n);
+  var h=z*Math.sqrt(p*(1-p)/n + z*z/(4*n*n));
+  return [Math.max(0,(c-h)/d), Math.min(1,(c+h)/d)];
+}
+function adverseTimes(entries){
+  var out=[];
+  entries.forEach(function(e){
+    if(e.kind==='symptom') out.push(e.when);
+    if(e.kind==='stool'){ var b=e.bristol||4; if(b<=2||b>=6) out.push(e.when); }
+  });
+  return out.sort(function(a,b){return a-b;});
+}
+function median(a){
+  var b=a.slice().sort(function(x,y){return x-y;});
+  return b.length ? b[Math.floor(b.length/2)] : 0;
+}
+
+function computeStats(entries, windowH, minDose){
+  minDose = (minDose===undefined) ? 0.25 : minDose;
+  var foods=entries.filter(function(e){return e.kind==='food';}).sort(function(a,b){return a.when-b.when;});
+  var events=adverseTimes(entries), W=windowH*3600000;
+
+  var meals=foods.map(function(f){
+    var mult=qtyMultiplier(f.quantity), toks={};
+    (f.ingredients||[]).forEach(function(x){
+      var base=normIng(ingName(x)), doses=expandDose(ingName(x), mult*ingDose(x));
+      Object.keys(doses).forEach(function(t){
+        if(!toks[t]) toks[t]={dose:0, literal:false, from:{}};
+        toks[t].dose += doses[t];
+        if(t===base) toks[t].literal=true; else toks[t].from[base]=1;
+      });
+    });
+    return {f:f, toks:toks, mult:mult,
+            hit:events.some(function(t){ return t>f.when && t<=f.when+W; })};
+  });
+
+  var tally={};
+  meals.forEach(function(m){
+    Object.keys(m.toks).forEach(function(t){
+      var d=m.toks[t].dose;
+      if(!tally[t]) tally[t]={n:0,k:0,trace:0,literal:false,from:{},doses:[],hits:[]};
+      var T=tally[t];
+      if(m.toks[t].literal) T.literal=true;
+      Object.keys(m.toks[t].from).forEach(function(pn){ T.from[pn]=1; });
+      if(d>=minDose){ T.n++; if(m.hit) T.k++; T.doses.push(d); T.hits.push(m.hit); }
+      else T.trace++;
+    });
+  });
+
+  var rows=Object.keys(tally).map(function(name){
+    var T=tally[name];
+    // control = meals where this component is absent or below the threshold
+    var without=meals.filter(function(m){
+      return !m.toks[name] || m.toks[name].dose < minDose; });
+    var cn=without.length, ck=without.filter(function(m){return m.hit;}).length;
+
+    // dose-response: split exposures at their median dose
+    var dr=null;
+    if(T.n>=6){
+      var med=median(T.doses), lo={k:0,n:0}, hi={k:0,n:0};
+      T.doses.forEach(function(d,i){
+        var side = d<med ? lo : hi;
+        side.n++; if(T.hits[i]) side.k++;
+      });
+      if(lo.n>=3 && hi.n>=3)
+        dr={split:med, lo:lo, hi:hi, loCI:wilson(lo.k,lo.n), hiCI:wilson(hi.k,hi.n)};
+    }
+    return {name:name, n:T.n, k:T.k, trace:T.trace, rate:T.n?T.k/T.n:0,
+            ci:wilson(T.k,T.n), cn:cn, control:cn?ck/cn:0,
+            literal:T.literal, from:Object.keys(T.from),
+            meanDose: T.doses.length ? T.doses.reduce(function(a,b){return a+b;},0)/T.doses.length : 0,
+            dr:dr};
+  }).filter(function(r){ return r.n>=2; })
+    .sort(function(a,b){ return (b.ci[0]-b.control)-(a.ci[0]-a.control); });
+
+  var hits=meals.filter(function(m){return m.hit;}).length;
+  return {windowH:windowH, minDose:minDose, meals:meals.length, events:events.length,
+          baseRate:meals.length?hits/meals.length:0, baseCI:wilson(hits,meals.length), rows:rows};
+}
+
+/* ---------------- Claude API ---------------- */
+function repairJSON(t){
+  var inStr=false, esc2=false, stack=[];
+  for(var i=0;i<t.length;i++){
+    var c=t[i];
+    if(inStr){ if(esc2) esc2=false; else if(c==='\\') esc2=true; else if(c==='"') inStr=false; continue; }
+    if(c==='"') inStr=true;
+    else if(c==='{') stack.push('}');
+    else if(c==='[') stack.push(']');
+    else if(c==='}'||c===']') stack.pop();
+  }
+  var out=t; if(inStr) out+='"';
+  out=out.replace(/,\s*$/,'');
+  for(var j=stack.length-1;j>=0;j--) out+=stack[j];
+  return out;
+}
+function parseLoose(text, open, close){
+  open=open||'{'; close=close||'}';
+  if(!text) return null;
+  var t=String(text).replace(/```json|```/g,'').trim();
+  var st=t.indexOf(open); if(st<0) return null;
+  t=t.slice(st);
+  try{ return JSON.parse(t); }catch(e){}
+  for(var end=t.length; end>0; end--){
+    if(t[end-1]!==close) continue;
+    try{ return JSON.parse(t.slice(0,end)); }catch(e){}
+  }
+  try{ return JSON.parse(repairJSON(t)); }catch(e){ return null; }
+}
+function askClaude(prompt){
+  var key=getKey();
+  if(!key) return Promise.reject(new Error('No API key set. Open Settings and paste one in.'));
+  return fetch('https://api.anthropic.com/v1/messages',{
+    method:'POST',
+    headers:{
+      'content-type':'application/json',
+      'x-api-key':key,
+      'anthropic-version':'2023-06-01',
+      'anthropic-dangerous-direct-browser-access':'true'
+    },
+    body:JSON.stringify({model:MODEL, max_tokens:1200, messages:[{role:'user',content:prompt}]})
+  }).then(function(r){ return r.json(); }).then(function(data){
+    if(data.error) throw new Error(data.error.message || JSON.stringify(data.error));
+    return (data.content||[]).map(function(b){ return b && b.type==='text' ? b.text : ''; }).join('');
+  });
+}
+
+/* ---------------- constants ---------------- */
+var QTY=['a splash','a bite','small portion','normal portion','large portion','a glass','a bowl','seconds'];
+var SYMS=['Bloating','Gas','Cramping','Nausea','Reflux','Urgency','Headache','Low energy','Brain fog','Joint ache','Skin flare','Poor sleep'];
+var SEV=['barely','mild','moderate','strong','severe'];
+var BRISTOL=['Separate hard lumps','Lumpy sausage','Sausage with cracks','Smooth soft sausage','Soft blobs, clear edges','Mushy, ragged edges','Watery, no solids'];
+var FLAGS=['Urgent','Straining','Incomplete','Painful','Mucus','Undigested food','Foul smelling','Floating'];
+var TITLES={food:'Something I ate', symptom:'How I felt', stool:'Bowel movement'};
+
+
+/* ---------------- ingredient knowledge ----------------
+   Composite foods get broken into components so that "ketchup" counts
+   toward tomato, vinegar and added sugar in the statistics, not just as
+   an opaque string. One level of nesting is followed (pizza -> cheese ->
+   dairy, lactose). */
+var CANON={
+  'whole milk':'milk','skim milk':'milk','2% milk':'milk','oat milk':'oat milk',
+  'cheddar':'cheese','mozzarella':'cheese','parmesan':'aged cheese','feta':'cheese',
+  'wheat gluten':'wheat','gluten':'wheat','white bread':'bread','sourdough':'bread',
+  'french fries':'fries','chips':'fries','scallion':'onion','scallions':'onion',
+  'green onion':'onion','shallot':'onion','red onion':'onion','onion powder':'onion',
+  'garlic powder':'garlic','tomatoes':'tomato','eggs':'egg','potatoes':'potato',
+  'seed oils':'seed oil','vegetable oil':'seed oil','canola oil':'seed oil',
+  'sunflower oil':'seed oil','soybean oil':'seed oil','sugar':'added sugar',
+  'high fructose corn syrup':'added sugar','corn syrup':'added sugar','honey':'added sugar',
+  'hot sauce':'chilli','sriracha':'chilli','chili':'chilli','chili pepper':'chilli',
+  'jalapeno':'chilli','cayenne':'chilli','beans':'legumes','black beans':'legumes',
+  'chickpeas':'legumes','lentils':'legumes','soy sauce':'soy sauce','soya':'soy'
+};
+var COMPOSITES={
+  /* component: share of a standalone serving. 1.0 means eating this food
+     delivers about as much of that component as eating it on its own.
+     0.04 for the onion in ketchup means a hot dog with ketchup carries
+     roughly one twenty-fifth of an onion, not an onion. */
+  'ketchup':{'tomato':0.6,'added sugar':0.35,'vinegar':0.3,'onion':0.04},
+  'mayonnaise':{'egg':0.3,'seed oil':0.8,'vinegar':0.15},
+  'ranch':{'dairy':0.3,'egg':0.15,'seed oil':0.6,'garlic':0.05,'onion':0.05},
+  'bbq sauce':{'tomato':0.5,'added sugar':0.5,'vinegar':0.3,'onion':0.06,'garlic':0.04},
+  'mustard':{'vinegar':0.3,'mustard seed':0.5},
+  'soy sauce':{'soy':0.5,'wheat':0.25,'salt':0.8},
+  'teriyaki':{'soy':0.45,'wheat':0.2,'added sugar':0.5,'garlic':0.06,'ginger':0.1},
+  'sriracha sauce':{'chilli':0.6,'garlic':0.1,'vinegar':0.3,'added sugar':0.25},
+  'salsa':{'tomato':0.7,'onion':0.25,'garlic':0.07,'chilli':0.3},
+  'pesto':{'garlic':0.15,'cheese':0.2,'seed oil':0.5,'pine nut':0.3},
+  'hummus':{'legumes':0.6,'sesame':0.25,'garlic':0.1,'lemon':0.1},
+  'peanut butter':{'peanut':0.9,'seed oil':0.2,'added sugar':0.15},
+  'bread':{'wheat':0.9,'yeast':0.5,'salt':0.3},
+  'bun':{'wheat':0.8,'yeast':0.45,'added sugar':0.2},
+  'pasta':{'wheat':1},'noodles':{'wheat':1},'tortilla':{'wheat':0.8},
+  'pizza':{'wheat':0.9,'cheese':0.8,'tomato':0.5,'yeast':0.5},
+  'cheese':{'dairy':1,'lactose':0.3,'salt':0.5},
+  'aged cheese':{'dairy':1,'histamine':0.8,'salt':0.6,'lactose':0.05},
+  'milk':{'dairy':1,'lactose':1},'cream':{'dairy':1,'lactose':0.5},
+  'butter':{'dairy':0.6,'lactose':0.05},
+  'yogurt':{'dairy':1,'lactose':0.5,'fermented':1},
+  'ice cream':{'dairy':1,'lactose':0.8,'added sugar':0.8},
+  'bacon':{'pork':1,'nitrates':0.7,'histamine':0.5,'salt':0.7},
+  'sausage':{'pork':1,'nitrates':0.6,'histamine':0.5},
+  'salami':{'pork':1,'nitrates':0.8,'histamine':0.9},
+  'ham':{'pork':1,'nitrates':0.6,'salt':0.6},
+  'hot dog':{'pork':0.8,'nitrates':0.7,'histamine':0.5,'salt':0.7},
+  'beer':{'alcohol':0.7,'barley':0.6,'yeast':0.6,'wheat':0.2},
+  'wine':{'alcohol':1,'histamine':0.6,'sulfites':0.7},
+  'coffee':{'caffeine':1},'tea':{'caffeine':0.5},
+  'cola':{'caffeine':0.3,'added sugar':0.9},
+  'chocolate':{'caffeine':0.3,'added sugar':0.8,'dairy':0.4},
+  'pickles':{'vinegar':0.7,'histamine':0.5,'fermented':0.6},
+  'sauerkraut':{'fermented':1,'histamine':0.8,'cabbage':1},
+  'kimchi':{'fermented':1,'histamine':0.8,'cabbage':0.9,'chilli':0.4,'garlic':0.2},
+  'fries':{'potato':0.9,'seed oil':0.6,'salt':0.5},
+  'gravy':{'wheat':0.3,'dairy':0.3},
+  'sushi rice':{'rice':1,'vinegar':0.15,'added sugar':0.1},
+  'curry':{'chilli':0.4,'onion':0.3,'garlic':0.15,'spices':0.8},
+  'apple':{'fructose':0.7},'pear':{'fructose':0.7,'sorbitol':0.5},
+  'honey':{'added sugar':0.9,'fructose':0.9},
+  'onion':{'fructan':0.9},'garlic':{'fructan':0.8},'wheat':{'fructan':0.35}
+};
+
+/* How much of a standalone serving the logged amount represents. */
+var QTY_WORDS={'splash':0.15,'dash':0.1,'drizzle':0.15,'smear':0.1,'bite':0.1,
+  'taste':0.1,'sliver':0.15,'little':0.3,'small':0.5,'half':0.5,'normal':1,
+  'regular':1,'medium':1,'portion':1,'serving':1,'glass':1,'cup':1,'plate':1.2,
+  'bowl':1.25,'large':1.75,'big':1.75,'huge':2.2,'seconds':2,'double':2,'lots':1.8,'plenty':1.8};
+var QTY_UNITS={'tsp':0.03,'teaspoon':0.03,'tbsp':0.1,'tablespoon':0.1,'slice':0.3,
+  'piece':0.2,'scoop':0.5,'cup':1,'glass':1,'bowl':1.25,'square':0.15};
+
+var QTY_ORDER=['splash','dash','drizzle','smear','sliver','taste','bite','little',
+  'seconds','double','huge','large','big','lots','plenty','small','half',
+  'plate','bowl','glass','cup','normal','regular','medium','portion','serving'];
+
+function qtyMultiplier(q){
+  var t=String(q||'').toLowerCase();
+  if(!t.trim()) return 1;
+  var m=t.match(/(\d+(?:\.\d+)?)\s*([a-z]+)/);
+  if(m){
+    var n=parseFloat(m[1]), unit=m[2].replace(/s$/,'');
+    if(QTY_UNITS[unit] && n<=20) return Math.min(n*QTY_UNITS[unit], 4);
+  }
+  // size words before container nouns before generic ones, so that
+  // "large portion" scores as large rather than as portion
+  for(var i=0;i<QTY_ORDER.length;i++){
+    var w=QTY_ORDER[i];
+    if(t.indexOf(w)>=0) return QTY_WORDS[w];
+  }
+  return 1;
+}
+
+/* An ingredient is either a plain string (legacy entries, assumed a full
+   serving) or {name, dose} where dose is in servings. */
+function ingName(x){ return typeof x==='string' ? x : ((x && x.name) || ''); }
+function ingDose(x){ return (x && typeof x==='object' && typeof x.dose==='number') ? x.dose : 1; }
+function ingIsWeighted(x){ return !!(x && typeof x==='object' && typeof x.dose==='number'); }
+function doseLabel(d){ return d<=0.15?'trace' : d<=0.5?'some' : d<=1.2?'full' : 'lots'; }
+function nextDose(d){ return d<=0.15?0.4 : d<=0.5?1 : d<=1.2?1.8 : 0.1; }
+function ingKey(x){ return normIng(ingName(x)); }
+
+/* Concepts the app derives itself. If deduction returns them they are dropped:
+   the user can't verify "fructan" by looking at their plate. */
+var DERIVED_ONLY={'fructan':1,'lactose':1,'fructose':1,'sorbitol':1,'histamine':1,
+  'nitrates':1,'sulfites':1,'capsaicin':1,'gluten':1,'fermented':1,'spices':1,'salt':1};
+
+/* Remove any item that is already a known component of another item in the
+   same list — ketchup implies tomato, so listing both invites the user to
+   delete one and lose the link. */
+function dropRedundant(list){
+  var covered={};
+  list.forEach(function(i){
+    var self=normIng(ingName(i)), comps=expandDose(ingName(i),1);
+    Object.keys(comps).forEach(function(c){ if(c!==self) covered[c]=ingName(i); });
+  });
+  return list.filter(function(i){
+    var n=normIng(ingName(i));
+    return !covered[n] && !DERIVED_ONLY[n];
+  });
+}
+
+/* What a listed ingredient will silently count toward in the analysis. */
+function derivedFrom(list){
+  var self={}, out={};
+  list.forEach(function(i){ self[normIng(ingName(i))]=1; });
+  list.forEach(function(i){
+    var base=normIng(ingName(i)), comps=expandDose(ingName(i),1);
+    Object.keys(comps).forEach(function(c){
+      if(c===base || self[c]) return;
+      if(!out[c]) out[c]=[];
+      if(out[c].indexOf(base)<0) out[c].push(base);
+    });
+  });
+  return out;
+}
+
+function normIng(raw){
+  var v=String(raw||'').toLowerCase().trim().replace(/\s+/g,' ').replace(/[.]$/,'');
+  if(!v) return '';
+  if(CANON[v]) return CANON[v];
+  if(v.length>4 && /s$/.test(v) && !/ss$/.test(v)){
+    var sing=v.slice(0,-1);
+    if(CANON[sing]) return CANON[sing];
+    if(COMPOSITES[sing]) return sing;
+  }
+  return v;
+}
+function expandDose(raw, mult){
+  var acc={};
+  function add(x, w, depth){
+    var v=normIng(x);
+    if(!v || w<0.005) return;
+    acc[v]=Math.max(acc[v]||0, w);
+    if(depth<2 && COMPOSITES[v]){
+      var c=COMPOSITES[v];
+      Object.keys(c).forEach(function(k){ add(k, w*c[k], depth+1); });
+    }
+  }
+  String(raw).split(/[(),]/).forEach(function(part){ add(part, mult, 0); });
+  return acc;
+}
+function expandIng(raw){ return Object.keys(expandDose(raw,1)); }
+
+/* ---------------- recipe memory ---------------- */
+var RECIPES_KEY='food-diary:recipes';
+function loadRecipes(){
+  try{ return JSON.parse(localStorage.getItem(RECIPES_KEY)||'{}') || {}; }catch(e){ return {}; }
+}
+function saveRecipes(r){ try{ localStorage.setItem(RECIPES_KEY, JSON.stringify(r)); }catch(e){} }
+function recipeKey(name){ return String(name||'').toLowerCase().trim().replace(/\s+/g,' '); }
+function rememberRecipe(name, ingredients){
+  if(!name || !ingredients || !ingredients.length) return;
+  var r=loadRecipes(), k=recipeKey(name);
+  r[k]={name:name.trim(), ingredients:ingredients.slice(), uses:((r[k]&&r[k].uses)||0)+1, updatedAt:Date.now()};
+  saveRecipes(r);
+}
+function findRecipe(name){
+  var k=recipeKey(name); if(k.length<3) return null;
+  var r=loadRecipes();
+  if(r[k]) return r[k];
+  var best=null;
+  Object.keys(r).forEach(function(key){
+    if(key.length<4) return;
+    if(k.indexOf(key)>=0 || key.indexOf(k)>=0){
+      if(!best || key.length>recipeKey(best.name).length) best=r[key];
+    }
+  });
+  return best;
+}
+
+/* ---------------- state ---------------- */
+var state = {entries:[], composer:null, draft:null, confirming:null, showSettings:false};
+
+/* ---------------- rendering ---------------- */
+function render(){
+  var app=document.getElementById('app');
+  var c={food:0,symptom:0,stool:0};
+  state.entries.forEach(function(e){ c[e.kind]++; });
+
+  var html='';
+  html+='<div style="display:flex;justify-content:space-between;align-items:flex-start">';
+  html+='<div><h1>What I ate, how I felt</h1><div class="sub">'+c.food+' meals · '+c.symptom+' symptoms · '+c.stool+' movements</div></div>';
+  html+='<button class="mini" data-act="settings">Settings</button></div>';
+
+  if(location.protocol==='file:' || location.protocol==='content:'){
+    html+='<div class="banner" style="margin-top:14px">Running from a local file. Android will eventually '+
+      'drop this tab and fail to reload it, and your data is tied to a temporary address. '+
+      'Put these files on a web address and install from there.</div>';
+  }
+  if(!storageOK){
+    html+='<div class="banner" style="margin-top:14px">This browser is blocking local storage, so entries won\'t survive a reload. '+
+          'Opening the file from a web address instead of a local file usually fixes it. '+
+          '<span class="mono tiny">'+esc(storageWhy)+'</span></div>';
+  } else { html+='<div style="height:14px"></div>'; }
+
+  if(state.showSettings) html+=settingsHTML();
+
+  html+='<div class="row" style="margin-bottom:14px">'+
+    btn('food','Food')+btn('symptom','Symptom')+btn('stool','Stool')+'</div>';
+  html+='<div id="composer-top"></div>';
+
+  if(state.entries.length>=2)
+    html+='<button class="btn-out" data-act="analyze">Analyze the log</button>';
+
+  if(!state.entries.length){
+    html+='<div class="card" style="text-align:center;border-style:dashed;border-left-width:1px">'+
+      '<p style="margin:0 0 6px">Nothing logged yet.</p>'+
+      '<p class="small muted" style="margin:0">Start with whatever you last ate and whatever you\'re feeling now. '+
+      'Patterns need about a week of both before they mean anything.</p></div>';
+  }
+
+  var map={};
+  state.entries.forEach(function(e){
+    var k=startOfDay(new Date(e.when)).getTime();
+    (map[k]=map[k]||[]).push(e);
+  });
+  Object.keys(map).map(Number).sort(function(a,b){return b-a;}).forEach(function(d){
+    var list=map[d].sort(function(a,b){return a.when-b.when;});
+    html+='<section style="margin-bottom:24px">';
+    html+='<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px">'+
+      '<h2>'+esc(fmtDay(d))+'</h2><span class="mono tiny faint">'+relDay(d)+'</span></div>';
+    html+=railHTML(d,list);
+    list.forEach(function(e){
+      html += (state.composer && state.composer.id===e.id) ? '<div id="composer-'+e.id+'"></div>' : cardHTML(e);
+    });
+    html+='</section>';
+  });
+
+  if(state.entries.length){
+    var last=0;
+    try{ last=+(localStorage.getItem('food-diary:lastbackup')||0); }catch(e){}
+    var days = last ? Math.floor((Date.now()-last)/86400000) : null;
+    var stale = (days===null || days>=7);
+    html+='<div style="margin-top:26px">'+
+      '<button class="mini'+(stale?' solid':'')+'" data-act="export">Download a backup</button>'+
+      '<div class="tiny faint" style="margin-top:6px">'+
+      (last ? 'Last backup '+(days===0?'today':days+' day'+(days===1?'':'s')+' ago')+'. Includes recipes and your API key — keep the file private.'
+            : 'Never backed up. Browser storage on Android can be cleared without warning.')+
+      '</div></div>';
+  }
+
+  app.innerHTML=html;
+
+  if(state.composer){
+    var slot = state.composer.id
+      ? document.getElementById('composer-'+state.composer.id)
+      : document.getElementById('composer-top');
+    if(slot) mountComposer(slot);
+  }
+}
+
+function btn(kind,label){
+  return '<button class="btn '+kind+'" data-act="new" data-kind="'+kind+'">'+label+'</button>';
+}
+
+function railHTML(dayStart, list){
+  var h='<div class="rail">';
+  [6,12,18].forEach(function(x){ h+='<div class="grid" style="left:'+(x/24*100)+'%"></div>'; });
+  list.forEach(function(e){
+    var at=(e.when-dayStart)/86400000*100;
+    if(e.kind==='symptom'){
+      var end = e.endedAt ? Math.min(e.endedAt, dayStart+86400000) : e.when+1800000;
+      var w = Math.max((end-e.when)/86400000*100, 1.2);
+      var peak = (e.symptoms||[]).reduce(function(a,s){ return Math.max(a, s.severity||3); }, 3);
+      h+='<div style="position:absolute;left:'+at+'%;width:'+w+'%;top:4px;height:7px;border-radius:4px;background:var(--sym);opacity:'+(0.35+0.13*peak)+'"></div>';
+    } else if(e.kind==='stool'){
+      h+='<div style="position:absolute;left:calc('+at+'% - 4px);top:15px;width:8px;height:8px;background:var(--stool);transform:rotate(45deg)"></div>';
+    } else {
+      h+='<div style="position:absolute;left:calc('+at+'% - 4px);bottom:4px;width:8px;height:8px;border-radius:8px;background:var(--food)"></div>';
+    }
+  });
+  h+='</div><div class="ticks"><span>12a</span><span>6a</span><span>noon</span><span>6p</span><span>12a</span></div>';
+  return '<div style="margin-bottom:12px">'+h+'</div>';
+}
+
+function cardHTML(e){
+  var h='<div class="card '+e.kind+'"><div style="display:flex;gap:12px;align-items:flex-start">';
+  h+='<div class="time">'+fmtTime(e.when)+'</div><div style="flex:1;min-width:0">';
+
+  if(e.kind==='food'){
+    h+='<div>'+esc(e.description)+(e.quantity?' <span class="muted">· '+esc(e.quantity)+'</span>':'')+'</div>';
+    if(e.ingredients.length){
+      h+='<div class="wrapflex" style="margin-top:7px">';
+      e.ingredients.forEach(function(i){
+        var d=ingDose(i);
+        h+='<span class="tag food">'+esc(ingName(i))+
+           (ingIsWeighted(i)&&d!==1?' <span style="opacity:.65">'+doseLabel(d)+'</span>':'')+'</span>';
+      });
+      h+='</div>';
+    }
+  }
+  if(e.kind==='symptom'){
+    h+='<div class="wrapflex">';
+    (e.symptoms||[]).forEach(function(s){
+      h+='<span class="tag sym">'+esc(s.name)+' <span class="mono" style="font-size:11px">'+s.severity+'/5</span></span>';
+    });
+    h+='</div><div class="mono tiny muted" style="margin-top:5px">'+
+      (e.endedAt ? 'eased '+fmtTime(e.endedAt)+' · lasted '+fmtDur(e.endedAt-e.when) : 'still going / not recorded')+'</div>';
+  }
+  if(e.kind==='stool'){
+    h+='<div>Type '+e.bristol+' <span class="muted">· '+esc(BRISTOL[(e.bristol||4)-1])+'</span></div>';
+    if(e.flags.length){
+      h+='<div class="wrapflex" style="margin-top:7px">';
+      e.flags.forEach(function(f){ h+='<span class="tag stool">'+esc(f)+'</span>'; });
+      h+='</div>';
+    }
+  }
+  if(e.notes) h+='<div class="small muted" style="margin-top:7px">'+esc(e.notes)+'</div>';
+
+  h+='</div><div style="display:flex;flex-direction:column;gap:8px">'+
+     '<button class="faint" data-act="edit" data-id="'+e.id+'">Edit</button>'+
+     '<button class="faint" data-act="askdel" data-id="'+e.id+'">Del</button></div></div>';
+
+  if(state.confirming===e.id){
+    h+='<div style="display:flex;gap:8px;align-items:center;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)">'+
+       '<span class="small" style="flex:1">Delete this entry for good?</span>'+
+       '<button class="mini solid" data-act="del" data-id="'+e.id+'">Delete</button>'+
+       '<button class="mini" data-act="cancelDel">Keep</button></div>';
+  }
+  return h+'</div>';
+}
+
+function settingsHTML(){
+  var k=getKey();
+  return '<div class="card" style="border-left-width:1px">'+
+    '<div class="lbl">Claude API key <span>· stored only in this browser</span></div>'+
+    '<input id="apikey" type="password" placeholder="sk-ant-..." value="'+esc(k)+'">'+
+    '<div class="row" style="margin-top:8px">'+
+      '<button class="mini" data-act="savekey">Save key</button>'+
+      '<button class="mini" data-act="testkey">Test it</button>'+
+      '<button class="mini" data-act="export">Backup</button>'+
+      '<button class="mini" data-act="import">Restore</button>'+
+    '</div>'+
+    '<div id="keynote" class="note faint"></div>'+
+    '<div class="tiny muted" style="margin-top:10px;line-height:1.5">'+
+      'Without a key the diary still works and the statistics still run — only ingredient lookup and the written interpretation need it. '+
+      'Get one at console.anthropic.com; it bills separately from a Claude subscription.</div>'+
+    '<div id="iopanel"></div>'+
+    estimateHTML()+recipeListHTML()+'</div>';
+}
+
+/* ---------- retro-fit amounts onto entries logged before doses existed ---------- */
+function unweighted(){
+  return state.entries.filter(function(e){
+    return e.kind==='food' && (e.ingredients||[]).length &&
+           (e.ingredients||[]).some(function(x){ return !ingIsWeighted(x); });
+  });
+}
+
+function estimateBatch(list, done, total){
+  var note=document.getElementById('estNote');
+  if(!list.length){
+    if(note){ note.className='note ok'; note.textContent='Done — '+total+' entries now have amounts.'; }
+    saveEntries(); render();
+    var n2=document.getElementById('estNote');
+    if(n2){ n2.className='note ok'; n2.textContent='Done — '+total+' entries now have amounts.'; }
+    return;
+  }
+  var batch=list.slice(0,5), rest=list.slice(5);
+  if(note){ note.className='note faint'; note.textContent='Estimating… '+done+' of '+total+' done.'; }
+
+  var dishes=batch.map(function(e,i){
+    return i+'. dish: "'+e.description+'", amount eaten: "'+(e.quantity||'a normal portion')+
+      '", ingredients: '+e.ingredients.map(ingName).join(', ');
+  }).join('\n');
+
+  var prompt='For each dish, estimate how much of each listed ingredient it contains, in servings, '+
+    'where 1.0 means about as much as eating that ingredient on its own.\n\n'+
+    'Guidance: the main component of a dish is 0.8-1.5. A couple of slices of onion or tomato on a burger '+
+    'is about 0.2. A garnish, seasoning or condiment smear is 0.05-0.15. A side portion is 0.5-1.0.\n\n'+
+    dishes+'\n\n'+
+    'Return ONLY JSON, no fences: [{"i":0,"ingredients":[{"name":"exact name as given","servings":0.2}]}]\n'+
+    'Keep every ingredient name character-for-character as given. Include every ingredient listed.';
+
+  askClaude(prompt).then(function(text){
+    var arr=parseLoose(text,'[',']');
+    if(!Array.isArray(arr)) throw new Error('unexpected reply');
+    arr.forEach(function(r){
+      var e=batch[r.i];
+      if(!e || !r.ingredients) return;
+      var map={};
+      r.ingredients.forEach(function(x){
+        if(x && x.name) map[String(x.name).toLowerCase().trim()]=
+          Math.max(0.02, Math.min(3, typeof x.servings==='number' ? x.servings : 1));
+      });
+      e.ingredients=e.ingredients.map(function(x){
+        var nm=ingName(x), hit=map[nm.toLowerCase().trim()];
+        return {name:nm, dose: hit!==undefined ? hit : ingDose(x)};
+      });
+    });
+    saveEntries();
+    estimateBatch(rest, done+batch.length, total);
+  }).catch(function(err){
+    var n=document.getElementById('estNote');
+    if(n){ n.className='note bad';
+      n.textContent='Stopped after '+done+' of '+total+': '+String(err.message||err)+
+        ' — the ones already done are saved. Press again to continue.'; }
+    saveEntries();
+  });
+}
+
+function estimateHTML(){
+  var n=unweighted().length;
+  if(!n) return '';
+  return '<div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--line)">'+
+    '<div class="lbl">Older entries without amounts</div>'+
+    '<p class="tiny muted" style="margin:0 0 8px">'+n+' food '+(n===1?'entry was':'entries were')+
+    ' logged before amounts existed, so every ingredient in '+(n===1?'it':'them')+' counts as a full serving. '+
+    'This asks Claude to estimate a realistic amount for each one and rewrites them in place. '+
+    'Download a backup first.</p>'+
+    '<button class="mini" data-act="estimate">Estimate amounts for '+n+' '+(n===1?'entry':'entries')+'</button>'+
+    '<div id="estNote" class="note faint"></div></div>';
+}
+
+function recipeListHTML(){
+  var r=loadRecipes(), keys=Object.keys(r);
+  if(!keys.length) return '';
+  keys.sort(function(a,b){ return (r[b].uses||0)-(r[a].uses||0); });
+  return '<div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--line)">'+
+    '<div class="lbl">Saved recipes <span>· reused automatically when the name matches</span></div>'+
+    keys.map(function(k){
+      return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px">'+
+        '<span class="small">'+esc(r[k].name)+' <span class="faint tiny">'+r[k].ingredients.length+
+        ' ingredients</span></span>'+
+        '<button class="mini" data-act="rmRecipe" data-val="'+esc(r[k].name)+'" style="padding:2px 8px">Forget</button></div>';
+    }).join('')+'</div>';
+}
+
+/* ---------------- composer ---------------- */
+function newDraft(kind, e){
+  return {
+    kind:kind,
+    whenText: e ? e.whenText : 'right now',
+    description: e ? e.description||'' : '',
+    quantity: e ? e.quantity||'' : '',
+    ingredients: e ? (e.ingredients||[]).slice() : [],
+    symptoms: e ? (e.symptoms||[]).map(function(s){return {name:s.name,severity:s.severity};}) : [],
+    endedText: e ? e.endedText||'' : '',
+    bristol: e ? e.bristol||4 : 4,
+    flags: e ? (e.flags||[]).slice() : [],
+    notes: e ? e.notes||'' : ''
+  };
+}
+
+function mountComposer(slot){
+  var d=state.draft, kind=d.kind;
+  var h='<div class="composer '+kind+'">';
+  h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">'+
+     '<div style="font-family:var(--display);font-size:18px">'+(state.composer.id?'Edit · ':'')+TITLES[kind]+'</div>'+
+     '<button class="faint" data-act="closeComposer">Close</button></div>';
+
+  h+='<div class="fld"><div class="lbl">'+(kind==='symptom'?'When it started':'When')+'</div>'+
+     '<input id="whenText" value="'+esc(d.whenText)+'" placeholder="August 26 8:30 pm">'+
+     '<div class="wrapflex" style="margin-top:6px">'+
+       preset('whenText','right now')+preset('whenText','1 hour ago')+
+       preset('whenText','today at noon')+preset('whenText','last night')+
+     '</div><div id="whenNote" class="note"></div></div>';
+
+  if(kind==='food'){
+    h+='<div class="fld"><div class="lbl">What it was</div>'+
+       '<input id="description" value="'+esc(d.description)+'" placeholder="carrot soup recipe">'+
+       '<div id="recipeHit" class="note faint"></div></div>';
+    h+='<div class="fld"><div class="lbl">How much <span>· a splash reads differently from a bowl</span></div>'+
+       '<input id="quantity" value="'+esc(d.quantity)+'" placeholder="6 pieces">'+
+       '<div class="wrapflex" style="margin-top:6px">'+
+         QTY.map(function(q){ return preset('quantity',q); }).join('')+'</div></div>';
+    h+='<div class="fld"><div class="lbl">Ingredients <span>· remove anything that isn\'t right</span></div>'+
+       '<button class="btn food" style="flex:none;display:inline-flex;padding:8px 12px;margin-bottom:8px" data-act="deduce">Find ingredients</button>'+
+       '<div id="deduceNote" class="note bad"></div>'+
+       '<div id="ingList" class="wrapflex" style="margin-bottom:6px"></div>'+
+       '<div id="derivedHint" style="margin-bottom:8px;line-height:1.4"></div>'+
+       '<div class="row"><input id="newIng" placeholder="add one yourself">'+
+       '<button class="mini" data-act="addIng" style="padding:0 14px">Add</button></div></div>';
+  }
+
+  if(kind==='symptom'){
+    h+='<div class="fld"><div class="lbl">What I felt <span>· pick as many as apply</span></div>'+
+       '<div id="symChips" class="wrapflex"></div>'+
+       '<div class="row" style="margin-top:8px"><input id="customSym" placeholder="something else">'+
+       '<button class="mini" data-act="addSym" style="padding:0 14px">Add</button></div></div>';
+    h+='<div class="fld" id="sevBlock"></div>';
+    h+='<div class="fld"><div class="lbl">When it eased <span>· optional</span></div>'+
+       '<input id="endedText" value="'+esc(d.endedText)+'" placeholder="3 hours later">'+
+       '<div class="wrapflex" style="margin-top:6px">'+
+         preset('endedText','3 hours later')+preset('endedText','right now')+preset('endedText','this morning')+
+       '</div><div id="endNote" class="note"></div></div>';
+  }
+
+  if(kind==='stool'){
+    h+='<div class="fld"><div class="lbl">Bristol type <span>· 3 and 4 are the normal range</span></div>'+
+       '<div class="row" id="bristolRow"></div>'+
+       '<div id="bristolLabel" class="small muted" style="margin-top:8px"></div></div>';
+    h+='<div class="fld"><div class="lbl">Anything notable <span>· optional</span></div>'+
+       '<div id="flagChips" class="wrapflex"></div></div>';
+  }
+
+  h+='<div class="fld"><div class="lbl">Notes <span>· optional</span></div>'+
+     '<textarea id="notes">'+esc(d.notes)+'</textarea></div>';
+  h+='<div class="row"><button class="btn '+kind+'" data-act="save" id="saveBtn">'+
+     (state.composer.id?'Save changes':'Save entry')+'</button>'+
+     '<button class="mini" data-act="closeComposer" style="padding:0 16px">Cancel</button></div>';
+  h+='</div>';
+  slot.innerHTML=h;
+
+  ['whenText','description','quantity','endedText','notes'].forEach(function(f){
+    var el=document.getElementById(f);
+    if(el) el.addEventListener('input', function(){
+      state.draft[f]=el.value;
+      if(f==='whenText'||f==='endedText') updateTimeNotes();
+      if(f==='description'){ validate(); paintRecipeHit(); }
+    });
+  });
+  paintIngredients(); paintSymptoms(); paintStool(); paintRecipeHit();
+  updateTimeNotes(); validate();
+}
+
+function preset(field,val){
+  return '<button class="chip" data-act="preset" data-field="'+field+'" data-val="'+esc(val)+'">'+esc(val)+'</button>';
+}
+
+function updateTimeNotes(){
+  var d=state.draft; if(!d) return;
+  var w=parseWhen(d.whenText), el=document.getElementById('whenNote');
+  if(el){
+    el.className='note '+(w?'ok':(d.whenText.trim()?'bad':'faint'));
+    el.textContent = w ? '→ '+fmtStamp(w)
+      : (d.whenText.trim() ? 'Can\'t read that. Try "August 26 8:30 pm", "yesterday 8:30 pm", "2 hours ago".' : '');
+  }
+  var e2=document.getElementById('endNote');
+  if(e2){
+    var end=d.endedText.trim()?parseWhen(d.endedText,new Date(),w||undefined):null;
+    e2.className='note '+(end?'ok':(d.endedText.trim()?'bad':'faint'));
+    e2.textContent = end ? '→ '+fmtStamp(end) : (d.endedText.trim()?'Can\'t read that.':'');
+  }
+}
+
+function paintRecipeHit(){
+  var box=document.getElementById('recipeHit'); if(!box) return;
+  var d=state.draft, hit=findRecipe(d.description);
+  if(!hit || !hit.ingredients.length){ box.innerHTML=''; return; }
+  box.className='note';
+  box.innerHTML='<span class="ok">Saved recipe: '+esc(hit.name)+' — '+hit.ingredients.length+
+    ' ingredients</span> <button class="mini" data-act="useRecipe" data-val="'+esc(hit.name)+
+    '" style="padding:2px 8px">Use them</button>';
+}
+
+function paintIngredients(){
+  var box=document.getElementById('ingList'); if(!box) return;
+  var d=state.draft;
+  box.innerHTML = d.ingredients.length
+    ? d.ingredients.map(function(i){
+        var nm=ingName(i), dz=ingDose(i);
+        return '<span class="tag food" style="padding:5px 9px;border-radius:999px">'+esc(nm)+
+          ' <button data-act="cycleIng" data-val="'+esc(nm)+'" style="color:var(--food);opacity:.7;font-size:11px">'+
+          doseLabel(dz)+'</button>'+
+          ' <button data-act="rmIng" data-val="'+esc(nm)+'" style="color:var(--food)">×</button></span>'; }).join('')
+    : '<span class="tiny faint">None yet.</span>';
+  var der=derivedFrom(d.ingredients), keys=Object.keys(der);
+  var hint=document.getElementById('derivedHint');
+  if(hint){
+    hint.innerHTML = keys.length
+      ? '<span class="tiny faint">Also counted automatically: '+
+        keys.slice(0,10).map(function(k){ return esc(k)+' <span style="opacity:.6">(from '+
+          esc(der[k].join(', '))+')</span>'; }).join(' · ')+
+        '. No need to add these yourself.</span>'
+      : '';
+  }
+}
+
+function paintSymptoms(){
+  var chips=document.getElementById('symChips'); if(!chips) return;
+  var d=state.draft;
+  var names=d.symptoms.map(function(s){ return s.name.toLowerCase(); });
+  var all=SYMS.slice();
+  d.symptoms.forEach(function(s){
+    if(SYMS.map(function(x){return x.toLowerCase();}).indexOf(s.name.toLowerCase())<0) all.push(s.name);
+  });
+  chips.innerHTML=all.map(function(s){
+    var on=names.indexOf(s.toLowerCase())>=0;
+    return '<button class="chip symptom'+(on?' on':'')+'" data-act="togSym" data-val="'+esc(s)+'">'+esc(s)+'</button>';
+  }).join('');
+
+  var box=document.getElementById('sevBlock'); if(!box) return;
+  if(!d.symptoms.length){ box.innerHTML=''; return; }
+  box.innerHTML='<div class="lbl">How strong was each</div>'+d.symptoms.map(function(s){
+    return '<div style="margin-bottom:10px">'+
+      '<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:5px">'+
+      '<span>'+esc(s.name)+'</span><span class="tiny faint">'+SEV[s.severity-1]+'</span></div>'+
+      '<div class="row">'+[1,2,3,4,5].map(function(n){
+        var on=s.severity===n;
+        return '<button class="num'+(on?' on':'')+'" data-act="sev" data-val="'+esc(s.name)+'" data-n="'+n+'"'+
+               (on?' style="background:var(--sym);border-color:var(--sym)"':'')+'>'+n+'</button>';
+      }).join('')+'</div></div>';
+  }).join('');
+}
+
+function paintStool(){
+  var row=document.getElementById('bristolRow'); if(!row) return;
+  var d=state.draft;
+  row.innerHTML=[1,2,3,4,5,6,7].map(function(n){
+    var on=d.bristol===n;
+    return '<button class="num'+(on?' on':'')+'" data-act="bristol" data-n="'+n+'"'+
+      (on?' style="background:var(--stool);border-color:var(--stool)"':(n===3||n===4?' style="border-color:var(--stool)"':''))+'>'+n+'</button>';
+  }).join('');
+  document.getElementById('bristolLabel').textContent=BRISTOL[d.bristol-1];
+  var fc=document.getElementById('flagChips');
+  fc.innerHTML=FLAGS.map(function(f){
+    var on=d.flags.indexOf(f)>=0;
+    return '<button class="chip stool'+(on?' on':'')+'" data-act="togFlag" data-val="'+esc(f)+'">'+esc(f)+'</button>';
+  }).join('');
+}
+
+function validate(){
+  var d=state.draft, b=document.getElementById('saveBtn'); if(!b) return;
+  var ok = parseWhen(d.whenText)!==null &&
+    (d.kind==='food' ? d.description.trim()!=='' : d.kind==='symptom' ? d.symptoms.length>0 : true);
+  b.style.opacity = ok?1:0.45;
+  b.disabled=!ok;
+}
+
+function saveDraft(){
+  var d=state.draft, when=parseWhen(d.whenText); if(when===null) return;
+  var end = d.kind==='symptom' && d.endedText.trim() ? parseWhen(d.endedText,new Date(),when) : null;
+  var now=Date.now();
+  var payload={
+    kind:d.kind, when:when, whenText:d.whenText,
+    endedAt:end, endedText:d.kind==='symptom'?d.endedText:'',
+    description:d.description.trim(), quantity:d.quantity.trim(),
+    ingredients:d.ingredients, symptoms:d.kind==='symptom'?d.symptoms:[],
+    bristol:d.kind==='stool'?d.bristol:null, flags:d.kind==='stool'?d.flags:[],
+    notes:d.notes.trim(), updatedAt:now
+  };
+  if(state.composer.id){
+    state.entries=state.entries.map(function(e){
+      return e.id===state.composer.id ? Object.assign({}, e, payload) : e; });
+  } else {
+    payload.id=now+'-'+Math.random().toString(36).slice(2,8);
+    payload.createdAt=now;
+    state.entries.push(payload);
+  }
+  if(d.kind==='food' && d.description.trim() && d.ingredients.length)
+    rememberRecipe(d.description.trim(), d.ingredients);
+  state.composer=null; state.draft=null;
+  saveEntries(); render();
+}
+
+/* ---------------- analysis ---------------- */
+var analysis={windowH:24, minDose:0.25, state:'idle', result:null, raw:'', err:''};
+
+var INSTRUCTIONS =
+"You are analysing a personal food, stool and symptom diary to find candidate triggers. Reason like a careful GI dietitian.\n\n"+
+"Physiological timings to apply:\n"+
+"- Gastric emptying 2-5 h; fat and volume slow it.\n"+
+"- Osmotic or enzymatic reactions (lactose, fructose, polyols): 30 min - 4 h.\n"+
+"- Colonic fermentation of FODMAPs and fibre: 6-24 h, so bloating and loose stool often belong to the PREVIOUS day's meal.\n"+
+"- Histamine and vasoactive amines (aged cheese, cured meat, wine, ferments): 15 min - 3 h.\n"+
+"- Immune or inflammatory responses (gluten in coeliac or NCGS, food-protein reactions): 6-48 h, can persist days.\n"+
+"- Caffeine and alcohol affect sleep and next-morning energy 6-12 h later.\n"+
+"- Reflux 0-3 h, worse lying down.\n"+
+"Bristol 1-2 means slow transit, 6-7 fast transit; read stool type as an objective signal alongside reported symptoms.\n\n"+
+"Weigh dose thresholds, cumulative load across a day, negative evidence from symptom-free days, and small sample size.\n\n"+
+"A table of computed rates with 95% Wilson confidence intervals is supplied. Use those numbers. Do NOT invent statistics, and never call a wide interval strong evidence.\n"+
+"Composite foods were expanded into components, so rows marked 'component of X' overlap with X and must not be treated as independent evidence.\n"+
+"Where an ingredient the user logged is itself a composite you recognise, say what it typically contains and which component is the plausible culprit.\n"+
+"Respect the dose scores: a trace of an ingredient inside a condiment is not evidence of a reaction to that ingredient eaten properly. Where a DOSE-RESPONSE split is given, say whether the food looks tolerated below a threshold.\n\n"+
+"Return ONLY a JSON object, no fences:\n"+
+'{"overview":"2-3 sentences","suspects":[{"name":"","confidence":"high|moderate|low","pattern":"","evidence":"","dose":""}],'+
+'"cleared":[{"name":"","why":""}],"timing":"","gaps":[""],"nextSteps":[""]}\n'+
+"Max 4 suspects, 3 cleared, 2 gaps, 3 nextSteps, every string under 25 words. The reply is capped, so a short complete object beats a long truncated one.";
+
+function logText(){
+  return state.entries.slice().sort(function(a,b){return a.when-b.when;}).slice(-160).map(function(e){
+    var d=new Date(e.when);
+    var stamp=d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2)+
+      ' '+['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()]+' '+
+      ('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);
+    if(e.kind==='food')
+      return stamp+' | FOOD | '+e.description+' [amount: '+(e.quantity||'unspecified')+']'+
+        (e.ingredients.length?' | ingredients: '+e.ingredients.map(function(i){
+          return ingName(i)+(ingIsWeighted(i)?' ('+ingDose(i).toFixed(2)+' servings)':'');
+        }).join(', '):'')+(e.notes?' | note: '+e.notes:'');
+    if(e.kind==='stool')
+      return stamp+' | STOOL | Bristol '+e.bristol+(e.flags.length?' | '+e.flags.join(', '):'')+(e.notes?' | note: '+e.notes:'');
+    return stamp+' | SYMPTOM | '+(e.symptoms||[]).map(function(s){return s.name+' '+s.severity+'/5';}).join(', ')+
+      ' | '+(e.endedAt?'eased after '+fmtDur(e.endedAt-e.when):'end time not recorded')+(e.notes?' | note: '+e.notes:'');
+  }).join('\n');
+}
+
+function runAnalysis(){
+  var s=computeStats(state.entries, analysis.windowH, analysis.minDose);
+  analysis.state='loading'; analysis.err=''; renderModal();
+  var table = s.rows.length
+    ? s.rows.slice(0,16).map(function(r){
+        var line=r.name+(!r.literal&&r.from.length?' (component of '+r.from.slice(0,3).join(', ')+')':'')+
+          ': symptom followed '+r.k+'/'+r.n+' meals ('+pc(r.rate)+', 95% CI '+
+          pc(r.ci[0])+'-'+pc(r.ci[1])+'); without it '+pc(r.control)+' of '+r.cn+' meals'+
+          '; mean dose '+r.meanDose.toFixed(2)+' servings'+
+          (r.trace?'; plus '+r.trace+' trace exposures below threshold, excluded':'');
+        if(r.dr) line+='; DOSE-RESPONSE: below '+r.dr.split.toFixed(2)+' servings '+r.dr.lo.k+'/'+r.dr.lo.n+
+          ' ('+pc(r.dr.lo.k/r.dr.lo.n)+'), above '+r.dr.hi.k+'/'+r.dr.hi.n+' ('+pc(r.dr.hi.k/r.dr.hi.n)+')';
+        return line; }).join('\n')
+    : 'Not enough repeated ingredients to tabulate.';
+  var prompt = INSTRUCTIONS+
+    "\n\nDOSE MODEL: each ingredient is scored in servings, where 1.0 is a standalone portion. "+
+    "Composite foods contribute a fraction — the onion in ketchup scores about 0.04 servings, not 1. "+
+    "The logged amount scales this too. Only exposures at or above "+s.minDose+" servings are counted below; "+
+    "smaller ones are reported as trace exposures and excluded from the rates.\n\n"+
+    "COMPUTED RATES (adverse event within "+s.windowH+" h of a meal; "+s.meals+" meals, "+
+    s.events+" events, baseline "+pc(s.baseRate)+" 95% CI "+pc(s.baseCI[0])+"-"+pc(s.baseCI[1])+"):\n"+table+
+    "\n\nDIARY (chronological, 24h clock):\n"+logText();
+
+  askClaude(prompt).then(function(text){
+    analysis.raw=text;
+    var p=parseLoose(text);
+    if(p && (p.overview||p.suspects)){ analysis.result=p; analysis.state='done'; }
+    else if(text.trim()){ analysis.state='raw'; }
+    else throw new Error('empty response');
+    renderModal();
+  }).catch(function(err){
+    analysis.err=String(err && err.message || err);
+    analysis.state='error'; renderModal();
+  });
+}
+
+function renderModal(){
+  var s=computeStats(state.entries, analysis.windowH, analysis.minDose);
+  var h='<div class="modal"><div class="mhead"><div>'+
+    '<div style="font-family:var(--display);font-size:20px">Pattern report</div>'+
+    '<div class="mono" style="font-size:10px;color:#9FB0AC">'+s.meals+' meals · '+s.events+
+    ' adverse events · '+analysis.windowH+'h · dose ≥'+analysis.minDose+'</div></div>'+
+    '<button style="color:#fff;font-size:20px" data-act="closeModal">×</button></div><div class="wrap">';
+
+  h+='<div class="sec"><div class="lbl">Follow-up window</div>'+
+    '<p class="tiny muted" style="margin:0 0 8px">How long after a meal a symptom still counts as possibly related. '+
+    'Widen it for fermentation and inflammatory lags, narrow it for immediate reactions. The rates recompute instantly.</p><div class="row">'+
+    [6,12,24,48].map(function(x){
+      var on=analysis.windowH===x;
+      return '<button class="num'+(on?' on':'')+'" data-act="win" data-n="'+x+'"'+
+        (on?' style="background:var(--ink);border-color:var(--ink)"':'')+'>'+x+'h</button>';
+    }).join('')+'</div></div>';
+
+  h+='<div class="sec"><div class="lbl">Count an exposure from</div>'+
+    '<p class="tiny muted" style="margin:0 0 8px">Ingredients are scored in servings. A whole onion is 1.0; '+
+    'the onion inside ketchup is about 0.04. Anything below the threshold is logged as a trace exposure and left '+
+    'out of the rates, so condiment traces don\'t masquerade as real exposures.</p><div class="row">'+
+    [[0.05,'trace 0.05'],[0.25,'modest 0.25'],[0.75,'full 0.75']].map(function(o){
+      var on=analysis.minDose===o[0];
+      return '<button class="num'+(on?' on':'')+'" data-act="dose" data-n="'+o[0]+'"'+
+        (on?' style="background:var(--ink);border-color:var(--ink)"':'')+'>'+o[1]+'</button>';
+    }).join('')+'</div></div>';
+
+  h+='<div class="sec"><div class="lbl">Rates with 95% confidence intervals</div>';
+  if(!s.rows.length){
+    h+='<p class="small muted">Nothing has been eaten twice yet, so there is nothing to compare.</p>';
+  } else {
+    h+='<p class="tiny muted" style="margin:0 0 10px">Bar = 95% Wilson interval for the chance a symptom follows within '+
+      analysis.windowH+'h. Thick mark = observed rate. Thin line = rate when that ingredient is absent. '+
+      'If the thin line sits inside the bar, the data cannot tell it apart from chance. '+
+      'Rows marked "via" are components inferred from a composite food — ketchup contributes to tomato, vinegar and added sugar.</p>';
+    s.rows.slice(0,12).forEach(function(r){
+      var via = (!r.literal && r.from.length) ? ' <span class="tiny faint">via '+esc(r.from.slice(0,3).join(', '))+'</span>' : '';
+      h+='<div style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px">'+
+        '<span>'+esc(r.name)+via+'</span><span class="mono tiny muted">'+r.k+'/'+r.n+' · '+pc(r.rate)+
+        ' ['+pc(r.ci[0])+'–'+pc(r.ci[1])+'] vs '+pc(r.control)+'</span></div>'+
+        '<div class="bar"><div class="ci" style="left:'+(r.ci[0]*100)+'%;width:'+Math.max((r.ci[1]-r.ci[0])*100,1)+'%"></div>'+
+        '<div class="pt" style="left:calc('+(r.rate*100)+'% - 1.5px)"></div>'+
+        '<div class="ctl" style="left:'+(r.control*100)+'%"></div></div>'+
+        (r.trace?'<div class="mono tiny faint" style="margin-top:3px">'+r.trace+' further meal'+
+          (r.trace===1?'':'s')+' had only a trace, excluded</div>':'')+
+        (r.dr?'<div class="mono tiny" style="margin-top:3px;color:var(--food)">dose-response: '+
+          pc(r.dr.lo.k/r.dr.lo.n)+' below '+r.dr.split.toFixed(2)+' servings ('+r.dr.lo.k+'/'+r.dr.lo.n+
+          '), '+pc(r.dr.hi.k/r.dr.hi.n)+' above ('+r.dr.hi.k+'/'+r.dr.hi.n+')</div>':'')+
+        '</div>';
+    });
+    h+='<div class="mono tiny faint">baseline across all meals: '+pc(s.baseRate)+
+       ' ['+pc(s.baseCI[0])+'–'+pc(s.baseCI[1])+']</div>';
+  }
+  h+='</div>';
+
+  if(analysis.state==='idle' || analysis.state==='stale')
+    h+='<button class="btn-out" data-act="run">Write the interpretation</button>';
+  if(analysis.state==='loading')
+    h+='<p class="muted" style="text-align:center;padding:24px 0">Lining meals up against symptoms…</p>';
+  if(analysis.state==='error')
+    h+='<div class="card"><div class="small">The written interpretation didn\'t come back. The rates above are computed locally and still stand.</div>'+
+       '<div class="note bad">'+esc(analysis.err)+'</div>'+
+       '<button class="mini" data-act="run" style="margin-top:8px">Try again</button></div>';
+  if(analysis.state==='raw')
+    h+='<div class="sec"><div class="lbl">Interpretation (unstructured)</div><div class="card">'+
+       '<p class="tiny muted">The reply didn\'t arrive in the expected structure, so here it is as written.</p>'+
+       '<div style="white-space:pre-wrap" class="small">'+esc(analysis.raw)+'</div></div></div>';
+
+  if(analysis.state==='done' && analysis.result){
+    var r=analysis.result;
+    if(r.overview) h+='<div class="sec"><div class="lbl">Overview</div><p style="margin:0">'+esc(r.overview)+'</p></div>';
+    if(r.suspects && r.suspects.length){
+      h+='<div class="sec"><div class="lbl">Worth suspecting</div>';
+      r.suspects.forEach(function(x){
+        var col = x.confidence==='high'?'var(--sym)':x.confidence==='moderate'?'#A9713F':'var(--muted)';
+        var row=null;
+        s.rows.forEach(function(rr){ if(rr.name===String(x.name).toLowerCase()) row=rr; });
+        h+='<div class="card" style="border-left:3px solid '+col+'">'+
+          '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">'+
+          '<span style="font-size:16px">'+esc(x.name)+'</span>'+
+          '<span class="pill" style="background:'+col+'">'+esc(x.confidence||'')+'</span></div>';
+        if(row) h+='<div class="mono tiny muted" style="margin-top:4px">'+row.k+'/'+row.n+' meals · '+
+          pc(row.rate)+' ['+pc(row.ci[0])+'–'+pc(row.ci[1])+'] vs '+pc(row.control)+' without</div>';
+        if(x.pattern) h+='<div class="small" style="margin-top:6px">'+esc(x.pattern)+'</div>';
+        if(x.evidence) h+='<div class="small muted" style="margin-top:4px">'+esc(x.evidence)+'</div>';
+        if(x.dose) h+='<div class="small" style="margin-top:4px;color:var(--food)">Dose: '+esc(x.dose)+'</div>';
+        h+='</div>';
+      });
+      h+='</div>';
+    }
+    if(r.timing) h+='<div class="sec"><div class="lbl">Timing</div><p style="margin:0">'+esc(r.timing)+'</p></div>';
+    if(r.cleared && r.cleared.length){
+      h+='<div class="sec"><div class="lbl">Probably not the problem</div>';
+      r.cleared.forEach(function(c){ h+='<div class="small" style="margin-bottom:4px"><span style="color:var(--food)">'+
+        esc(c.name)+'</span><span class="muted"> — '+esc(c.why)+'</span></div>'; });
+      h+='</div>';
+    }
+    if(r.gaps && r.gaps.length){
+      h+='<div class="sec"><div class="lbl">Where the data is thin</div>';
+      r.gaps.forEach(function(g){ h+='<div class="small muted" style="margin-bottom:4px">· '+esc(g)+'</div>'; });
+      h+='</div>';
+    }
+    if(r.nextSteps && r.nextSteps.length){
+      h+='<div class="sec"><div class="lbl">What to try next</div>';
+      r.nextSteps.forEach(function(n){ h+='<div class="small" style="margin-bottom:4px">· '+esc(n)+'</div>'; });
+      h+='</div>';
+    }
+  }
+
+  h+='<p class="tiny faint" style="line-height:1.5;margin-top:20px">The intervals describe sampling error only. '+
+     'They cannot account for ingredients that always appear together, meals you did not log, or anything else that '+
+     'varied at the same time. Correlational, not a diagnosis — persistent or worsening gut symptoms are worth taking to a doctor.</p>';
+  h+='</div></div>';
+  document.getElementById('modal').innerHTML=h;
+}
+
+/* ---------------- events ---------------- */
+document.addEventListener('click', function(ev){
+  var t=ev.target.closest('[data-act]'); if(!t) return;
+  var act=t.getAttribute('data-act'), id=t.getAttribute('data-id'), val=t.getAttribute('data-val');
+  var d=state.draft;
+
+  if(act==='new'){ state.composer={kind:t.getAttribute('data-kind')}; state.draft=newDraft(state.composer.kind); render(); }
+  else if(act==='edit'){
+    var e=state.entries.filter(function(x){return x.id===id;})[0];
+    state.composer={kind:e.kind,id:id}; state.draft=newDraft(e.kind,e); render();
+  }
+  else if(act==='closeComposer'){ state.composer=null; state.draft=null; render(); }
+  else if(act==='askdel'){ state.confirming=id; render(); }
+  else if(act==='cancelDel'){ state.confirming=null; render(); }
+  else if(act==='del'){
+    state.entries=state.entries.filter(function(x){return x.id!==id;});
+    state.confirming=null; saveEntries(); render();
+  }
+  else if(act==='save'){ saveDraft(); }
+  else if(act==='preset'){
+    var f=t.getAttribute('data-field');
+    d[f]=val; document.getElementById(f).value=val; updateTimeNotes(); validate();
+  }
+  else if(act==='addIng'){
+    var el=document.getElementById('newIng'), v=el.value.trim().toLowerCase();
+    var have=d.ingredients.map(ingName);
+    if(v && have.indexOf(v)<0) d.ingredients.push({name:v, dose:1});
+    el.value=''; paintIngredients();
+  }
+  else if(act==='rmIng'){
+    d.ingredients=d.ingredients.filter(function(x){ return ingName(x)!==val; });
+    paintIngredients();
+  }
+  else if(act==='cycleIng'){
+    d.ingredients=d.ingredients.map(function(x){
+      return ingName(x)===val ? {name:ingName(x), dose:nextDose(ingDose(x))} : x; });
+    paintIngredients();
+  }
+  else if(act==='togSym'){
+    var idx=-1;
+    d.symptoms.forEach(function(sx,i){ if(sx.name.toLowerCase()===val.toLowerCase()) idx=i; });
+    if(idx>=0) d.symptoms.splice(idx,1); else d.symptoms.push({name:val,severity:3});
+    paintSymptoms(); validate();
+  }
+  else if(act==='addSym'){
+    var ce=document.getElementById('customSym'), cv=ce.value.trim();
+    if(cv){ var dup=false;
+      d.symptoms.forEach(function(sx){ if(sx.name.toLowerCase()===cv.toLowerCase()) dup=true; });
+      if(!dup) d.symptoms.push({name:cv,severity:3});
+    }
+    ce.value=''; paintSymptoms(); validate();
+  }
+  else if(act==='sev'){
+    var n=+t.getAttribute('data-n');
+    d.symptoms.forEach(function(sx){ if(sx.name===val) sx.severity=n; });
+    paintSymptoms();
+  }
+  else if(act==='bristol'){ d.bristol=+t.getAttribute('data-n'); paintStool(); }
+  else if(act==='togFlag'){
+    var i2=d.flags.indexOf(val);
+    if(i2>=0) d.flags.splice(i2,1); else d.flags.push(val);
+    paintStool();
+  }
+  else if(act==='useRecipe'){
+    var hit=findRecipe(val);
+    if(hit){
+      var have2=d.ingredients.map(ingName);
+      hit.ingredients.forEach(function(i){ if(have2.indexOf(ingName(i))<0) d.ingredients.push(i); });
+    }
+    paintIngredients();
+  }
+  else if(act==='unlock'){ tryRecover(); }
+  else if(act==='estimate'){
+    var todo=unweighted();
+    estimateBatch(todo, 0, todo.length);
+  }
+  else if(act==='deduce'){ deduce(t); }
+  else if(act==='deduceForce'){ t.setAttribute('data-act','deduce'); deduceAPI(t); }
+  else if(act==='rmRecipe'){
+    var rs=loadRecipes(); delete rs[recipeKey(val)]; saveRecipes(rs); render();
+  }
+  else if(act==='settings'){ state.showSettings=!state.showSettings; render(); }
+  else if(act==='savekey'){
+    setKey(document.getElementById('apikey').value.trim());
+    document.getElementById('keynote').textContent='Saved in this browser.';
+  }
+  else if(act==='testkey'){
+    var note=document.getElementById('keynote');
+    setKey(document.getElementById('apikey').value.trim());
+    note.className='note faint'; note.textContent='Testing…';
+    askClaude('Reply with the single word: working')
+      .then(function(x){ note.className='note ok'; note.textContent='Key works — '+x.trim().slice(0,40); })
+      .catch(function(e){ note.className='note bad'; note.textContent=String(e.message||e); });
+  }
+  else if(act==='export'){
+    try{ localStorage.setItem('food-diary:lastbackup', String(Date.now())); }catch(e){}
+    var payload={app:'food-diary', version:2, exportedAt:Date.now(),
+                 apiKey:getKey(), recipes:loadRecipes(), entries:state.entries};
+    var blob=new Blob([JSON.stringify(payload)],{type:'application/json'});
+    var a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download='food-diary-'+new Date().toISOString().slice(0,10)+'.json';
+    a.click();
+  }
+  else if(act==='import'){
+    var p=document.getElementById('iopanel');
+    p.innerHTML='<div style="margin-top:10px"><textarea id="importBox" placeholder="Paste exported JSON here"></textarea>'+
+      '<button class="mini" data-act="doImport" style="margin-top:6px">Load these entries</button>'+
+      '<div id="importNote" class="note faint"></div></div>';
+  }
+  else if(act==='doImport'){
+    var note2=document.getElementById('importNote');
+    try{
+      var parsed=JSON.parse(document.getElementById('importBox').value);
+      var arr, restored=[];
+      if(Array.isArray(parsed)) arr=parsed;
+      else if(parsed && Array.isArray(parsed.entries)){
+        arr=parsed.entries;
+        if(parsed.recipes && typeof parsed.recipes==='object'){
+          var cur=loadRecipes(), n=0;
+          Object.keys(parsed.recipes).forEach(function(k){ cur[k]=parsed.recipes[k]; n++; });
+          saveRecipes(cur); if(n) restored.push(n+' recipes');
+        }
+        if(parsed.apiKey){ setKey(parsed.apiKey); restored.push('API key'); }
+      }
+      else throw new Error('not a diary backup');
+      var byId={};
+      state.entries.forEach(function(e){ byId[e.id]=e; });
+      arr.map(migrate).filter(Boolean).forEach(function(e){ if(e.id) byId[e.id]=e; });
+      state.entries=Object.keys(byId).map(function(k){ return byId[k]; });
+      restored.unshift(arr.length+' entries');
+      saveEntries(); render();
+      var n3=document.getElementById('importNote');
+      if(n3){ n3.className='note ok'; n3.textContent='Restored '+restored.join(', ')+'.'; }
+    }catch(err){ if(note2){ note2.className='note bad'; note2.textContent=String(err.message||err); } }
+  }
+  else if(act==='analyze'){ analysis.state='idle'; analysis.result=null; renderModal(); runAnalysis(); }
+  else if(act==='closeModal'){ document.getElementById('modal').innerHTML=''; }
+  else if(act==='dose'){ analysis.minDose=parseFloat(t.getAttribute('data-n'));
+    if(analysis.state==='done'||analysis.state==='raw') analysis.state='stale';
+    renderModal(); }
+  else if(act==='win'){ analysis.windowH=+t.getAttribute('data-n');
+    if(analysis.state==='done'||analysis.state==='raw') analysis.state='stale';
+    renderModal(); }
+  else if(act==='run'){ runAnalysis(); }
+});
+
+function deduce(btn){
+  var d=state.draft, note=document.getElementById('deduceNote');
+  if(!d.description.trim()){ note.textContent='Type what you ate first.'; return; }
+  var saved=findRecipe(d.description);
+  if(saved && saved.ingredients.length){
+    var have3=d.ingredients.map(ingName);
+    saved.ingredients.forEach(function(i){ if(have3.indexOf(ingName(i))<0) d.ingredients.push(i); });
+    paintIngredients();
+    note.className='note ok';
+    note.textContent='Filled from your saved recipe "'+saved.name+'". Press again to also ask Claude.';
+    btn.setAttribute('data-act','deduceForce');
+    return;
+  }
+  btn.textContent='Working it out…'; note.textContent='';
+  deduceAPI(btn);
+}
+
+function deduceAPI(btn){
+  var d=state.draft, note=document.getElementById('deduceNote');
+  note.className='note faint'; note.textContent='';
+  var prompt='Break a dish down into the ingredients a food-sensitivity diary should track, '+
+    'estimating how much of each is present.\n\n'+
+    'Dish: "'+d.description+'"\nAmount eaten: "'+(d.quantity||'a normal portion')+'"\n\n'+
+    'Rules:\n'+
+    '- Return ONLY a JSON array of objects: [{"name":"onion","servings":0.2}, ...]. No prose, no fences.\n'+
+    '- 6 to 16 items, lowercase plain ingredient names.\n'+
+    '- "servings" is how much of that ingredient the dish contains compared with eating it on its own. '+
+    '1.0 means about a standalone portion. Two slices of onion on a burger is roughly 0.2. '+
+    'A garnish or seasoning is 0.05 to 0.15. The main component of the dish is 0.8 to 1.5.\n'+
+    '- CRITICAL: list only things the person would recognise as being in the dish by name. Name condiments, '+
+    'sauces and breads as themselves — ketchup, mayonnaise, soy sauce, bun, tortilla — and never list what is '+
+    'inside them. The app expands composites itself.\n'+
+    '- Never return abstract components: no fructan, lactose, gluten, histamine, capsaicin, nitrates, salt, spices.\n'+
+    '- Do include a whole food the person may not have thought about but would accept on sight, such as the egg '+
+    'in a pastry or the seed oil something was fried in.';
+  askClaude(prompt).then(function(text){
+    var arr=parseLoose(text,'[',']');
+    if(!Array.isArray(arr)) throw new Error('unexpected reply');
+    var have=d.ingredients.map(ingName), incoming=[];
+    arr.forEach(function(x){
+      var nm, dz=1;
+      if(typeof x==='string'){ nm=x; }
+      else if(x && x.name){ nm=x.name; if(typeof x.servings==='number') dz=x.servings; }
+      else return;
+      nm=String(nm).trim().toLowerCase();
+      dz=Math.max(0.02, Math.min(3, dz));
+      if(nm && have.indexOf(nm)<0){ incoming.push({name:nm, dose:dz}); have.push(nm); }
+    });
+    dropRedundant(incoming).forEach(function(i){ d.ingredients.push(i); });
+    btn.textContent='Find ingredients'; paintIngredients();
+  }).catch(function(err){
+    btn.textContent='Find ingredients';
+    note.textContent=String(err.message||err);
+  });
+}
+
+/* ---------------- boot ---------------- */
+(function(){
+  var t=testStorage();
+  storageOK=t.ok; storageWhy=t.why||'';
+  if(vaultExists()){
+    if('serviceWorker' in navigator && location.protocol.indexOf('http')===0)
+      navigator.serviceWorker.register('./sw.js').catch(function(){});
+    renderRecovery('');
+    return;
+  }
+  state.entries=loadEntries();
+  if('serviceWorker' in navigator && location.protocol.indexOf('http')===0){
+    navigator.serviceWorker.register('./sw.js').catch(function(){});
+  }
+  render();
+})();
+</script>
+</body>
+</html>
