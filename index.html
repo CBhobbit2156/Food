@@ -1327,50 +1327,53 @@ function renderModal(){
       '<div class="lbl" style="margin-bottom:8px">The three marks</div>'+
 
       legendRow({ci:[25,75]},
-        '<b>The pink shaded block.</b> How sure the numbers are. It is wide when you have logged few '+
-        'meals and narrows as you log more. Wide means "not enough data yet".') +
+        '<b>The pink band.</b> How sure the numbers are. It is wide when you have logged few meals '+
+        'and narrows as you log more. A wide pink band means "not enough data yet".') +
 
       legendRow({pt:60},
-        '<b>The thick blue line.</b> What actually happened. If symptoms followed 6 of 10 meals with '+
-        'this ingredient, it sits at 60%. It always sits inside the pink block.') +
+        '<b>The blue line.</b> What actually happened. If symptoms followed 6 of 10 meals with this '+
+        'ingredient, the blue line sits at 60%. It always falls somewhere inside the pink band.') +
 
       legendRow({ctl:30},
-        '<b>The thin black line.</b> Your comparison point: how often symptoms followed meals '+
+        '<b>The black line.</b> Your comparison point: how often symptoms followed meals '+
         '<i>without</i> this ingredient.') +
 
       '<p class="tiny muted" style="margin:0 0 14px;line-height:1.5">In one sentence: '+
       '<b>blue</b> is what happened, <b>pink</b> is how confident you can be about it, '+
-      '<b>black</b> is what to compare it against.</p>'+
+      '<b>black</b> is what to compare it against. The question is always the same — '+
+      'does the pink band reach the black line?</p>'+
 
       '<div class="lbl" style="margin:14px 0 8px">Four situations</div>'+
 
-      legendRow({ci:[44,100], pt:97, ctl:40},
-        '<b>Blue far right, but the block still covers black → not proven.</b> This is 3 meals out of 3, '+
-        'which looks convincing. But with only three meals the block stretches from 44% to 100% and swallows '+
-        'the black line, so luck alone could explain it. The most common trap. Keep logging.') +
+      legendRow({ci:[44,100], pt:97, ctl:60},
+        '<b>The pink band still reaches the black line → not proven.</b> Symptoms followed 3 meals out '+
+        'of 3, so the blue line sits at 100%. But three meals is almost nothing, so the pink band '+
+        'stretches from 44% all the way to 100% — and the black line at 60% falls inside it. Luck alone '+
+        'could produce this. The most common trap. Keep logging.') +
 
       legendRow({ci:[20,85], pt:52, ctl:45},
-        '<b>Blue and black nearly on top of each other → nothing here.</b> Symptoms follow this at about '+
-        'the same rate as everything else, whatever the block does.') +
+        '<b>The blue line and the black line nearly touch → nothing here.</b> Symptoms follow this at '+
+        'about the same rate as your other meals. When blue and black agree, the width of the pink band '+
+        'makes no difference.') +
 
       legendRow({ci:[55,90], pt:72, ctl:20},
-        '<b>Blue well right of black AND the block clear of it → suspicious.</b> Symptoms followed this '+
-        '72% of the time against 20% otherwise, and enough meals have been logged that the gap holds up. '+
-        'This is the one worth acting on.') +
+        '<b>The whole pink band sits to the RIGHT of the black line → suspicious.</b> Symptoms followed '+
+        'this 72% of the time, against 20% for meals without it. The pink band runs from 55% to 90% and '+
+        'never comes down as far as the black line at 20%. This is the one worth acting on.') +
 
       legendRow({ci:[2,18], pt:9, ctl:45},
-        '<b>Blue left of black, block clear of it → probably fine.</b> Symptoms follow this less often '+
-        'than they follow your other meals.') +
+        '<b>The whole pink band sits to the LEFT of the black line → probably fine.</b> Symptoms follow '+
+        'this less often than they follow your other meals.') +
 
-      '<p class="tiny muted" style="margin:0 0 12px;line-height:1.5">Blue tells you the direction and how '+
-      'big the effect looks. Pink tells you whether to believe it yet. You need both: a dramatic blue '+
-      'position means nothing while the block is still wide enough to cover the black line.</p>'+
+      '<p class="tiny muted" style="margin:0 0 12px;line-height:1.5">The blue line tells you the '+
+      'direction and the size of the effect. The pink band tells you whether to believe it yet. You need '+
+      'both: a blue line at the far right proves nothing while the pink band still reaches the black line.</p>'+
 
-      '<p class="tiny muted" style="margin:12px 0 0;line-height:1.5"><b>Why a range instead of one number?</b> '+
+      '<p class="tiny muted" style="margin:0 0 8px;line-height:1.5"><b>Why a band instead of one number?</b> '+
       'If symptoms followed 2 of 3 meals, the honest answer is not "67%" — three meals is almost nothing, and '+
-      'the truth could be 30% or 90%. The block shows every value still consistent with what you have logged.</p>'+
+      'the truth could be 30% or 90%. The pink band shows every value still consistent with what you have logged.</p>'+
 
-      '<p class="tiny muted" style="margin:10px 0 0;line-height:1.5"><b>One warning.</b> "Followed by symptoms" '+
+      '<p class="tiny muted" style="margin:0;line-height:1.5"><b>One warning.</b> "Followed by symptoms" '+
       'is not "caused symptoms". If you always eat two things together, both look equally guilty, and no amount '+
       'of logging will separate them. Only eating one without the other can do that.</p>'+
       '</div></details>'+
