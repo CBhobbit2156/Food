@@ -14,7 +14,7 @@
   :root{
     --bg:#EEF1F0; --panel:#fff; --ink:#141C1B; --muted:#63736F; --faint:#8B9995;
     --line:#D3DAD8; --food:#1F6B5B; --foodsoft:#DEEDE8; --sym:#8B3A5C;
-    --symsoft:#F3E2E9; --stool:#3A4E7A; --stoolsoft:#E1E6F1;
+    --symsoft:#F3E2E9; --stool:#3A4E7A; --stoolsoft:#E1E6F1; --mark:#1D5FA6;
     --display:'Iowan Old Style','Palatino Linotype',Palatino,Georgia,serif;
     --body:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
     --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
@@ -87,7 +87,7 @@
   .bar{position:relative;height:22px;background:#fff;border:1px solid var(--line);
        border-radius:4px}
   .bar .ci{position:absolute;top:6px;height:10px;background:var(--symsoft);border-radius:5px}
-  .bar .pt{position:absolute;top:4px;width:3px;height:14px;background:var(--sym);border-radius:2px}
+  .bar .pt{position:absolute;top:3px;width:4px;height:16px;background:var(--mark);border-radius:2px}
   .bar .ctl{position:absolute;top:0;bottom:0;width:1px;background:var(--ink);opacity:.45}
   .muted{color:var(--muted)} .faint{color:var(--faint)}
   .small{font-size:13px} .tiny{font-size:12px}
@@ -199,7 +199,7 @@ function renderRecovery(err){
     'after that.</p>'+
     '<input id="passIn" type="password" placeholder="Passphrase" autofocus>'+
     '<button class="btn food" data-act="unlock" style="margin-top:10px;width:100%">Convert</button>'+
-    (err?'<div class="note bad">'+esc(err)+'</div>':'')+'</div>';
+    (err?'<div class="note bad">'+esc(err)+'</div>':'')+footerHTML()+'</div>';
   var i=document.getElementById('passIn');
   if(i) i.addEventListener('keydown', function(e){ if(e.key==='Enter') tryRecover(); });
 }
@@ -307,6 +307,16 @@ function relDay(t){
   var n=Math.round((d0-d)/86400000);
   return n===0?'Today':n===1?'Yesterday':(n>1&&n<7)?n+' days ago':'';
 }
+/* Once an entry is saved its date is fixed. Editing it later must not re-read
+   "yesterday" against today, so the field is rewritten as an absolute date and
+   an unchanged field reuses the original timestamp exactly. */
+function absoluteText(t){
+  var d=new Date(t);
+  var mon=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()];
+  var h=d.getHours(), ap=h>=12?'pm':'am', hh=h%12; if(hh===0) hh=12;
+  return mon+' '+d.getDate()+' '+d.getFullYear()+' '+hh+':'+('0'+d.getMinutes()).slice(-2)+' '+ap;
+}
+
 function fmtDur(ms){
   var m=Math.round(ms/60000); if(m<60) return m+'m';
   var h=Math.floor(m/60), r=m%60; return r? h+'h '+r+'m' : h+'h';
@@ -672,6 +682,13 @@ function findRecipe(name){
 var state = {entries:[], composer:null, draft:null, confirming:null, showSettings:false};
 
 /* ---------------- rendering ---------------- */
+function footerHTML(){
+  return '<div style="margin-top:28px;padding-top:14px;border-top:1px solid var(--line);'+
+    'text-align:center;line-height:1.6" class="tiny muted">'+
+    'Jesus God is the Lord. Heaven is Great. 153 Fish are Great.</div>';
+}
+
+
 function render(){
   var app=document.getElementById('app');
   var c={food:0,symptom:0,stool:0};
@@ -738,6 +755,8 @@ function render(){
             : 'Never backed up. Browser storage on Android can be cleared without warning.')+
       '</div></div>';
   }
+
+  html+=footerHTML();
 
   app.innerHTML=html;
 
@@ -928,14 +947,20 @@ function recipeListHTML(){
 
 /* ---------------- composer ---------------- */
 function newDraft(kind, e){
+  var wt = e ? absoluteText(e.when) : 'right now';
+  var et = (e && e.endedAt) ? absoluteText(e.endedAt) : '';
   return {
     kind:kind,
-    whenText: e ? e.whenText : 'right now',
+    origWhen: e ? e.when : null,
+    origWhenText: wt,
+    origEnded: e ? (e.endedAt||null) : null,
+    origEndedText: et,
+    whenText: wt,
     description: e ? e.description||'' : '',
     quantity: e ? e.quantity||'' : '',
     ingredients: e ? (e.ingredients||[]).slice() : [],
     symptoms: e ? (e.symptoms||[]).map(function(s){return {name:s.name,severity:s.severity};}) : [],
-    endedText: e ? e.endedText||'' : '',
+    endedText: et,
     bristol: e ? e.bristol||4 : 4,
     flags: e ? (e.flags||[]).slice() : [],
     notes: e ? e.notes||'' : ''
@@ -1120,8 +1145,16 @@ function validate(){
 }
 
 function saveDraft(){
-  var d=state.draft, when=parseWhen(d.whenText); if(when===null) return;
-  var end = d.kind==='symptom' && d.endedText.trim() ? parseWhen(d.endedText,new Date(),when) : null;
+  var d=state.draft;
+  // an untouched field on an existing entry keeps its exact original timestamp
+  var when = (d.origWhen && d.whenText===d.origWhenText) ? d.origWhen : parseWhen(d.whenText);
+  if(when===null) return;
+  var end = null;
+  if(d.kind==='symptom' && d.endedText.trim()){
+    end = (d.origEnded && d.endedText===d.origEndedText)
+      ? d.origEnded
+      : parseWhen(d.endedText, new Date(), when);
+  }
   var now=Date.now();
   var payload={
     kind:d.kind, when:when, whenText:d.whenText,
@@ -1276,28 +1309,72 @@ function renderModal(){
   if(!s.rows.length){
     h+='<p class="small muted">Nothing has been eaten twice yet, so there is nothing to compare.</p>';
   } else {
+    function sample(opts){
+      var b='<div class="bar" style="width:110px;flex:none">';
+      if(opts.ci)  b+='<div class="ci" style="left:'+opts.ci[0]+'%;width:'+(opts.ci[1]-opts.ci[0])+'%"></div>';
+      if(opts.pt!==undefined) b+='<div class="pt" style="left:calc('+opts.pt+'% - 1.5px)"></div>';
+      if(opts.ctl!==undefined) b+='<div class="ctl" style="left:'+opts.ctl+'%"></div>';
+      return b+'</div>';
+    }
+    function legendRow(opts, text){
+      return '<div style="display:flex;gap:10px;align-items:center;margin-bottom:8px">'+
+        sample(opts)+'<div class="tiny" style="flex:1;line-height:1.4">'+text+'</div></div>';
+    }
+
     h+='<details style="margin:0 0 12px"><summary class="tiny" style="color:var(--muted)">'+
-      'How to read these bars</summary><div class="tiny muted" style="line-height:1.6;margin-top:8px">'+
-      '<p style="margin:0 0 8px"><b>The short version:</b> the shaded bar is the range of values '+
-      'consistent with what you have logged so far. The thin dark line is how often symptoms happen '+
-      'without that ingredient. If the line falls inside the bar, you cannot conclude anything yet.</p>'+
-      '<p style="margin:0 0 8px"><b>Why a range and not a number?</b> If a food was followed by symptoms '+
-      '2 times out of 3, the honest answer is not "67%". Three meals is almost nothing — the truth could '+
-      'easily be 30% or 90%. The bar shows that whole range of possibilities. It starts very wide and '+
-      'narrows as you log more meals. A wide bar means "we do not know yet", not "this is dangerous".</p>'+
-      '<p style="margin:0 0 8px"><b>What each shape means:</b><br>'+
-      '· <b>Thick mark</b> — what actually happened: symptoms followed this often.<br>'+
-      '· <b>Shaded bar</b> — the range the real rate is probably in, 95 times out of 100.<br>'+
-      '· <b>Thin dark line</b> — the same rate for meals without this ingredient. Your comparison point.</p>'+
-      '<p style="margin:0 0 8px"><b>Three examples:</b><br>'+
-      '· Bar spans 10–95% and the line sits in the middle → nothing learned yet, keep logging.<br>'+
-      '· Bar spans 55–90%, line at 20% → the bar sits entirely to the right of the line, so this is '+
-      'followed by symptoms far more often than usual. Worth testing by avoiding it.<br>'+
-      '· Bar spans 0–15%, line at 40% → followed by symptoms less often than usual. Likely fine.</p>'+
-      '<p style="margin:0"><b>One warning.</b> "Followed by symptoms" is not "caused symptoms". If you '+
-      'always eat two things together, both will look equally guilty and no amount of logging will '+
-      'separate them. The only way to tell is to eat one without the other.</p>'+
+      'What the marks mean</summary><div style="margin-top:10px">'+
+
+      '<div class="lbl" style="margin-bottom:8px">The three marks</div>'+
+
+      legendRow({ci:[25,75]},
+        '<b>The pink shaded block.</b> How sure the numbers are. It is wide when you have logged few '+
+        'meals and narrows as you log more. Wide means "not enough data yet".') +
+
+      legendRow({pt:60},
+        '<b>The thick blue line.</b> What actually happened. If symptoms followed 6 of 10 meals with '+
+        'this ingredient, it sits at 60%. It always sits inside the pink block.') +
+
+      legendRow({ctl:30},
+        '<b>The thin black line.</b> Your comparison point: how often symptoms followed meals '+
+        '<i>without</i> this ingredient.') +
+
+      '<p class="tiny muted" style="margin:0 0 14px;line-height:1.5">In one sentence: '+
+      '<b>blue</b> is what happened, <b>pink</b> is how confident you can be about it, '+
+      '<b>black</b> is what to compare it against.</p>'+
+
+      '<div class="lbl" style="margin:14px 0 8px">Four situations</div>'+
+
+      legendRow({ci:[44,100], pt:97, ctl:40},
+        '<b>Blue far right, but the block still covers black → not proven.</b> This is 3 meals out of 3, '+
+        'which looks convincing. But with only three meals the block stretches from 44% to 100% and swallows '+
+        'the black line, so luck alone could explain it. The most common trap. Keep logging.') +
+
+      legendRow({ci:[20,85], pt:52, ctl:45},
+        '<b>Blue and black nearly on top of each other → nothing here.</b> Symptoms follow this at about '+
+        'the same rate as everything else, whatever the block does.') +
+
+      legendRow({ci:[55,90], pt:72, ctl:20},
+        '<b>Blue well right of black AND the block clear of it → suspicious.</b> Symptoms followed this '+
+        '72% of the time against 20% otherwise, and enough meals have been logged that the gap holds up. '+
+        'This is the one worth acting on.') +
+
+      legendRow({ci:[2,18], pt:9, ctl:45},
+        '<b>Blue left of black, block clear of it → probably fine.</b> Symptoms follow this less often '+
+        'than they follow your other meals.') +
+
+      '<p class="tiny muted" style="margin:0 0 12px;line-height:1.5">Blue tells you the direction and how '+
+      'big the effect looks. Pink tells you whether to believe it yet. You need both: a dramatic blue '+
+      'position means nothing while the block is still wide enough to cover the black line.</p>'+
+
+      '<p class="tiny muted" style="margin:12px 0 0;line-height:1.5"><b>Why a range instead of one number?</b> '+
+      'If symptoms followed 2 of 3 meals, the honest answer is not "67%" — three meals is almost nothing, and '+
+      'the truth could be 30% or 90%. The block shows every value still consistent with what you have logged.</p>'+
+
+      '<p class="tiny muted" style="margin:10px 0 0;line-height:1.5"><b>One warning.</b> "Followed by symptoms" '+
+      'is not "caused symptoms". If you always eat two things together, both look equally guilty, and no amount '+
+      'of logging will separate them. Only eating one without the other can do that.</p>'+
       '</div></details>'+
+
       '<p class="tiny faint" style="margin:0 0 10px">Rows marked "via" are components of a composite food — '+
       'ketchup counts toward tomato, vinegar and added sugar.</p>';
     s.rows.slice(0,12).forEach(function(r){
@@ -1384,6 +1461,7 @@ function renderModal(){
   h+='<p class="tiny faint" style="line-height:1.5;margin-top:20px">The intervals describe sampling error only. '+
      'They cannot account for ingredients that always appear together, meals you did not log, or anything else that '+
      'varied at the same time. Correlational, not a diagnosis — persistent or worsening gut symptoms are worth taking to a doctor.</p>';
+  h+=footerHTML();
   h+='</div></div>';
   document.getElementById('modal').innerHTML=h;
 }
