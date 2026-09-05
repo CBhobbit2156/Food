@@ -356,6 +356,31 @@ function verdict(r){
   return {text:'Symptoms follow this LESS often than usual. Probably safe, or eaten on your calmer days.', tone:'ok'};
 }
 
+/* Things worth knowing about whether or not they appear in the log. An
+   allergen you have never logged is untested, which is different from ruled
+   out, and the report should say which. */
+var COMMON_TRIGGERS=[
+  ['dairy','Dairy'], ['lactose','Lactose'], ['wheat','Wheat / gluten'], ['egg','Egg'],
+  ['soy','Soy'], ['peanut','Peanut'], ['tree nuts','Tree nuts'], ['sesame','Sesame'],
+  ['shellfish','Shellfish'], ['fish','Fish'], ['caffeine','Caffeine'], ['alcohol','Alcohol'],
+  ['added sugar','Added sugar'], ['artificial sweetener','Artificial sweeteners'],
+  ['seed oil','Seed oil'], ['fructan','Fructans (onion, garlic, wheat)'],
+  ['fructose','Fructose'], ['sorbitol','Sugar alcohols'], ['histamine','Histamine'],
+  ['fermented','Fermented foods'], ['chilli','Chilli / spice'],
+  ['tomato','Tomato / nightshades'], ['legumes','Beans & legumes'], ['citrus','Citrus'],
+  ['corn','Corn'], ['nitrates','Cured meat / nitrates']
+];
+
+function triggerStatus(stats, token){
+  var row=null;
+  stats.rows.forEach(function(r){ if(r.name===token) row=r; });
+  if(row) return {state:'tested', row:row, v:verdict(row)};
+  var t=stats.all[token];
+  if(!t || (!t.n && !t.trace)) return {state:'never'};
+  if(!t.n) return {state:'trace', trace:t.trace};
+  return {state:'thin', n:t.n, k:t.k};
+}
+
 function median(a){
   var b=a.slice().sort(function(x,y){return x-y;});
   return b.length ? b[Math.floor(b.length/2)] : 0;
@@ -420,7 +445,7 @@ function computeStats(entries, windowH, minDose){
     .sort(function(a,b){ return (b.ci[0]-b.control)-(a.ci[0]-a.control); });
 
   var hits=meals.filter(function(m){return m.hit;}).length;
-  return {windowH:windowH, minDose:minDose, meals:meals.length, events:events.length,
+  return {windowH:windowH, minDose:minDose, meals:meals.length, events:events.length, all:tally,
           baseRate:meals.length?hits/meals.length:0, baseCI:wilson(hits,meals.length), rows:rows};
 }
 
@@ -499,6 +524,14 @@ var CANON={
   'sunflower oil':'seed oil','soybean oil':'seed oil','sugar':'added sugar',
   'high fructose corn syrup':'added sugar','corn syrup':'added sugar','honey':'added sugar',
   'hot sauce':'chilli','sriracha':'chilli','chili':'chilli','chili pepper':'chilli',
+  'almond':'tree nuts','walnut':'tree nuts','pecan':'tree nuts','cashew':'tree nuts',
+  'pistachio':'tree nuts','hazelnut':'tree nuts','macadamia':'tree nuts','pine nut':'tree nuts',
+  'shrimp':'shellfish','prawn':'shellfish','crab':'shellfish','lobster':'shellfish',
+  'scallop':'shellfish','mussel':'shellfish','clam':'shellfish','oyster':'shellfish',
+  'salmon':'fish','tuna':'fish','cod':'fish','anchovy':'fish','sardine':'fish',
+  'orange':'citrus','lemon':'citrus','lime':'citrus','grapefruit':'citrus',
+  'aspartame':'artificial sweetener','sucralose':'artificial sweetener',
+  'stevia':'artificial sweetener','xylitol':'artificial sweetener','erythritol':'artificial sweetener',
   'jalapeno':'chilli','cayenne':'chilli','beans':'legumes','black beans':'legumes',
   'chickpeas':'legumes','lentils':'legumes','soy sauce':'soy sauce','soya':'soy'
 };
@@ -1241,6 +1274,11 @@ function runAnalysis(){
     "smaller ones are reported as trace exposures and excluded from the rates.\n\n"+
     "COMPUTED RATES (adverse event within "+s.windowH+" h of a meal; "+s.meals+" meals, "+
     s.events+" events, baseline "+pc(s.baseRate)+" 95% CI "+pc(s.baseCI[0])+"-"+pc(s.baseCI[1])+"):\n"+table+
+    "\n\nUNTESTED COMMON TRIGGERS (absent from the log entirely, so no conclusion is possible "+
+    "about them — mention this only if it matters): "+
+    COMMON_TRIGGERS.filter(function(t){
+      var st=triggerStatus(s, t[0]); return st.state==='never';
+    }).map(function(t){ return t[1]; }).join(', ')+
     "\n\nDIARY (chronological, 24h clock):\n"+logText();
 
   askClaude(prompt, 4000).then(function(resp){
@@ -1399,6 +1437,66 @@ function renderModal(){
     });
     h+='<div class="mono tiny faint">baseline across all meals: '+pc(s.baseRate)+
        ' ['+pc(s.baseCI[0])+'–'+pc(s.baseCI[1])+']</div>';
+  }
+  h+='</div>';
+
+  h+='<div class="sec"><div class="lbl">Common triggers — what you have and have not tested</div>'+
+    '<p class="tiny muted" style="margin:0 0 10px;line-height:1.5">Every well-known trigger, whether or not '+
+    'it appears in your log. <b>Never logged</b> does not mean ruled out — it means untested. Either you '+
+    'avoid it, or it was present in something you logged without listing it.</p>';
+
+  var groups={signal:[], flat:[], thin:[], never:[]};
+  COMMON_TRIGGERS.forEach(function(pair){
+    var st=triggerStatus(s, pair[0]);
+    var item={label:pair[1], st:st};
+    if(st.state==='tested'){
+      if(st.v.tone==='bad' || st.v.tone==='ok') groups.signal.push(item);
+      else groups.flat.push(item);
+    }
+    else if(st.state==='thin' || st.state==='trace') groups.thin.push(item);
+    else groups.never.push(item);
+  });
+
+  function triggerRow(it){
+    var st=it.st, right='', tone='faint';
+    if(st.state==='tested'){
+      right=st.row.k+'/'+st.row.n+' meals · '+pc(st.row.rate)+' vs '+pc(st.row.control);
+      tone=st.v.tone;
+    } else if(st.state==='thin'){
+      right='only '+st.n+' meal'+(st.n===1?'':'s')+' — too few';
+    } else if(st.state==='trace'){
+      right='traces only, below the dose threshold';
+    } else {
+      right='never logged';
+    }
+    var line='<div style="display:flex;justify-content:space-between;gap:10px;margin-bottom:5px">'+
+      '<span class="small" style="color:var(--ink)">'+esc(it.label)+'</span>'+
+      '<span class="mono tiny '+(tone==='bad'?'bad':tone==='ok'?'ok':'faint')+'" style="text-align:right">'+
+      esc(right)+'</span></div>';
+    if(st.state==='tested')
+      line+='<div class="tiny '+(st.v.tone==='bad'?'bad':st.v.tone==='ok'?'ok':'faint')+
+        '" style="margin:-3px 0 8px">'+esc(st.v.text)+'</div>';
+    return line;
+  }
+
+  if(groups.signal.length){
+    h+='<div class="lbl" style="margin:12px 0 6px">Showing a difference</div>';
+    groups.signal.forEach(function(i){ h+=triggerRow(i); });
+  }
+  if(groups.flat.length){
+    h+='<div class="lbl" style="margin:12px 0 6px">Tested, no clear difference</div>';
+    groups.flat.forEach(function(i){ h+=triggerRow(i); });
+  }
+  if(groups.thin.length){
+    h+='<div class="lbl" style="margin:12px 0 6px">Not enough meals yet</div>';
+    groups.thin.forEach(function(i){ h+=triggerRow(i); });
+  }
+  if(groups.never.length){
+    h+='<div class="lbl" style="margin:12px 0 6px">Never logged — untested</div>';
+    groups.never.forEach(function(i){ h+=triggerRow(i); });
+    h+='<p class="tiny faint" style="margin:8px 0 0;line-height:1.5">If you eat any of these regularly, '+
+       'they are missing from your ingredient lists rather than from your diet, and the analysis cannot '+
+       'see them at all.</p>';
   }
   h+='</div>';
 
