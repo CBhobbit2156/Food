@@ -520,8 +520,20 @@ var SYMS=['Bloating','Gas','Cramping','Nausea','Reflux','Urgency','Headache',
 var SEV=['barely','mild','moderate','strong','severe'];
 var BRISTOL=['Separate hard lumps','Lumpy sausage','Sausage with cracks','Smooth soft sausage','Soft blobs, clear edges','Mushy, ragged edges','Watery, no solids'];
 var FLAGS=['Urgent','Straining','Incomplete','Painful','Mucus','Undigested food','Foul smelling','Floating'];
-var ACTIVITIES=['Tennis','Walking','Standing up'];
+var ACTIVITIES=['Tennis','Walking','Standing up','Mixed'];
 var NO_INTENSITY={'standing up':1};   // duration matters, effort rating doesn't
+
+/* What each preset means, carried into the export so an analyser reading the
+   rows knows that "Mixed" is not sitting and not sustained exercise either. */
+var ACTIVITY_MEANING={
+  'tennis':'Playing tennis — sustained exertion with bursts of running.',
+  'walking':'Continuous walking.',
+  'standing up':'Standing, largely stationary. Not sedentary, but no sustained exertion.',
+  'mixed':'A mixture of walking, standing and sitting down, with no sustained exertion — '+
+    'for example playing with children. More movement than a sitting hour, less than continuous exercise. '+
+    'Treat this interval as light intermittent activity, not as sedentary time and not as a workout.'
+};
+function activityMeaning(name){ return ACTIVITY_MEANING[String(name||'').toLowerCase().trim()] || null; }
 var TITLES={food:'Something I ate', symptom:'How I felt', stool:'Bowel movement',
   activity:'Physical activity', sleep:'Sleep', body:'Weight'};
 
@@ -1148,6 +1160,7 @@ function mountComposer(slot){
   if(kind==='activity'){
     h+='<div class="fld"><div class="lbl">What I did</div>'+
        '<div id="actChips" class="wrapflex"></div>'+
+       '<div id="actMeaning" style="margin-top:6px"></div>'+
        '<div class="lbl" style="margin-top:10px">Or type anything else</div>'+
        '<input id="activityName" value="'+esc(d.activity)+'" placeholder="e.g. cycling, gardening"></div>';
     h+='<div class="fld" id="intensityBlock"></div>';
@@ -1289,6 +1302,11 @@ function paintActivity(){
       '" data-act="setActivity" data-val="'+esc(a)+'">'+esc(a)+'</button>';
   }).join('');
 
+  var meaning=activityMeaning(d.activity);
+  var note=document.getElementById('actMeaning');
+  if(note) note.innerHTML = meaning
+    ? '<span class="tiny muted" style="line-height:1.4">'+esc(meaning)+'</span>' : '';
+
   var ib=document.getElementById('intensityBlock'); if(!ib) return;
   if(!d.activity || NO_INTENSITY[cur]){ ib.innerHTML=''; return; }
   ib.innerHTML='<div class="lbl">How hard <span>· 1 easy, 5 all out</span></div><div class="row">'+
@@ -1392,6 +1410,89 @@ var INSTRUCTIONS =
 '"cleared":[{"name":"","why":""}],"timing":"","gaps":[""],"nextSteps":[""]}\n'+
 "Max 4 suspects, 3 cleared, 2 gaps, 3 nextSteps, every string under 25 words. The reply is capped, so a short complete object beats a long truncated one.";
 
+/* Everything an analyser needs is carried by the data itself: readable local
+   timestamps, posture on sleep and activity, and one row per calendar day
+   saying what was true of that day — including days where nothing was logged,
+   which a list of entries cannot express on its own. */
+function localStamp(t){
+  var d=new Date(t);
+  return isoDay(t)+' '+('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);
+}
+
+function exportEntries(){
+  return state.entries.map(function(e){
+    var c={};
+    for(var k in e) if(Object.prototype.hasOwnProperty.call(e,k)) c[k]=e[k];
+    c.localTime=localStamp(e.when);
+    if(e.endedAt) c.localEndTime=localStamp(e.endedAt);
+    if(e.kind==='sleep'){
+      c.posture='lying down';
+      c.postureNote='The user was lying down for this entire interval, from localTime to localEndTime. '+
+        'This is not sedentary waking time and must not be counted as such.';
+    }
+    if(e.kind==='activity'){
+      var m=activityMeaning(e.activity);
+      c.posture = /^standing up$/i.test(e.activity||'') ? 'standing'
+        : /^mixed$/i.test(e.activity||'') ? 'mixed: walking, standing and sitting'
+        : 'upright and moving';
+      c.postureNote = (m ? m+' ' : '')+
+        'This applies to the entire interval from localTime to localEndTime.';
+      if(m) c.activityDescription=m;
+    }
+    return c;
+  });
+}
+
+function dailyContext(){
+  if(!state.entries.length) return [];
+  var sinceDay=startOfDay(new Date(effectiveSince())).getTime();
+  var times=state.entries.map(function(e){ return e.when; });
+  var first=startOfDay(new Date(Math.min.apply(null,times))).getTime();
+  var last=startOfDay(new Date(Math.max.apply(null,times))).getTime();
+  var out=[];
+  for(var t=first; t<=last+1; t+=86400000){
+    var dayStart=startOfDay(new Date(t)).getTime(), dayEnd=dayStart+86400000;
+    if(dayStart>last) break;
+    var tracked = dayStart >= sinceDay;
+    var acts=[], sleeps=[], mins=0, meals=0, symptoms=0, stools=0;
+    state.entries.forEach(function(e){
+      if(e.when < dayStart || e.when >= dayEnd) return;
+      if(e.kind==='activity'){
+        acts.push({what:e.activity, means:activityMeaning(e.activity), intensity:e.intensity||null,
+                   from:localStamp(e.when),
+                   to:e.endedAt?localStamp(e.endedAt):null,
+                   minutes:e.endedAt?Math.round((e.endedAt-e.when)/60000):null});
+        if(e.endedAt) mins+=Math.round((e.endedAt-e.when)/60000);
+      }
+      if(e.kind==='sleep') sleeps.push({from:localStamp(e.when),
+        to:e.endedAt?localStamp(e.endedAt):null,
+        hours:e.endedAt?Math.round((e.endedAt-e.when)/360000)/10:null,
+        posture:'lying down'});
+      if(e.kind==='food') meals++;
+      if(e.kind==='symptom') symptoms++;
+      if(e.kind==='stool') stools++;
+    });
+    var row={date:isoDay(dayStart), activityTracked:tracked, meals:meals,
+             symptomEntries:symptoms, stoolEntries:stools,
+             activities:acts, activeMinutes:tracked?mins:null, sleep:sleeps};
+    if(!tracked){
+      row.whatIsKnownAboutActivity='NOTHING. Activity, sleep and weight were not being logged on this '+
+        'date. Absence of activity data here means unrecorded, NOT inactive. Draw no conclusion about '+
+        'how active or sedentary the user was on this day, and do not compare it with tracked days.';
+    } else if(!acts.length){
+      row.whatIsKnownAboutActivity='No activity was logged on this tracked day, which means a mostly '+
+        'sitting day with no prolonged movement.'+
+        (sleeps.length?' Apart from the sleep intervals listed, when the user was lying down.':'');
+    } else {
+      row.whatIsKnownAboutActivity='The activities listed are the only physical activity on this day, '+
+        'totalling '+mins+' active minutes. The user was lying down during the sleep intervals listed '+
+        'and sitting during all other hours.';
+    }
+    out.push(row);
+  }
+  return out;
+}
+
 function dailySummary(){
   var since=effectiveSince(), byDay={};
   state.entries.forEach(function(e){
@@ -1471,8 +1572,12 @@ function runAnalysis(){
     "\n\nACTIVITY, SLEEP AND WEIGHT: logging for these began on "+isoDay(effectiveSince())+
     ". Before that date their absence means nothing was recorded, NOT that the user was inactive — draw "+
     "no activity conclusions about those days. From that date onward, a day with no activity entry was a "+
-    "mostly sitting day, and on days with activity entries the uncovered hours were spent sitting or lying "+
-    "down. Sleep entries are time in bed, not time asleep.\n"+
+    "mostly sitting day, and on days with activity entries the uncovered WAKING hours were spent sitting. "+
+    "Treat the full span of every sleep entry as lying down, not as sedentary waking time, and exclude "+
+    "sleep intervals when judging how long the user was upright. Sleep entries are time in bed, not time "+
+    "asleep. Activity types: Tennis is sustained exertion; Walking is continuous walking; Standing up is "+
+    "stationary standing; Mixed is walking, standing and sitting together with no sustained exertion (for "+
+    "example playing with children) — light intermittent activity, neither sedentary nor a workout.\n"+
     "\nDAILY SUMMARY (activity cutoff onward):\n"+dailySummary()+
     "\n\nUNTESTED COMMON TRIGGERS (absent from the log entirely, so no conclusion is possible "+
     "about them — mention this only if it matters): "+
@@ -1875,7 +1980,7 @@ document.addEventListener('click', function(ev){
     try{ localStorage.setItem('food-diary:lastbackup', String(Date.now())); }catch(e){}
     var since=effectiveSince();
     var payload={
-      app:'food-diary', version:3, exportedAt:Date.now(),
+      app:'food-diary', version:4, exportedAt:Date.now(), exportedAtLocal:localStamp(Date.now()),
       activityTrackingSince: since,
       activityTrackingSinceDate: isoDay(since),
       readMeBeforeAnalysing: {
@@ -1887,14 +1992,32 @@ document.addEventListener('click', function(ev){
           'activity levels across the cutoff.',
         activityAfterCutoff: 'From ' + isoDay(since) + ' onward, absence IS informative. A day with no ' +
           'activity entry was a mostly sitting day with no prolonged movement. On a day that does have ' +
-          'activity entries, the hours not covered by one were spent sitting or lying down.',
+          'activity entries, the waking hours not covered by one were spent sitting.',
         sleepEntries: 'A sleep entry records when the user lay down (when) and got out of bed (endedAt). ' +
           'That is time in bed, not necessarily time asleep.',
+        howToRead: 'Every entry carries localTime (and localEndTime where it has an end) in the user local '+
+          'time zone given above; the numeric when/endedAt are epoch milliseconds for the same instants. '+
+          'dailyContext has one row per calendar day, and its whatIsKnownAboutActivity field states plainly '+
+          'what may and may not be concluded about that day. Read dailyContext before drawing any '+
+          'conclusion about activity.',
+        activityTypes: 'Activity entries name what the user did. Preset meanings: ' +
+          'Tennis = sustained exertion with bursts of running; Walking = continuous walking; ' +
+          'Standing up = standing, largely stationary, not sedentary but no sustained exertion; ' +
+          'Mixed = a mixture of walking, standing and sitting down with no sustained exertion, such as ' +
+          'playing with children — light intermittent activity, neither sedentary time nor a workout. ' +
+          'Any other name was typed by the user. Each activity row also carries activityDescription.',
+        posture: 'Treat the whole interval of every sleep entry, from "when" to "endedAt", as LYING DOWN ' +
+          '(each sleep entry also carries posture: "lying down"). Outside those intervals and outside ' +
+          'activity entries, the user was sitting. Do not count sleep hours as sedentary waking time, ' +
+          'and when judging how long the user was upright or moving on a given day, exclude sleep intervals.',
         doseModel: 'Food ingredients carry a dose in servings, where 1.0 is a standalone portion. ' +
           'Composite foods contribute fractions — the onion inside ketchup is about 0.04 servings. ' +
           'Do not treat a trace as a real exposure.'
       },
-      apiKey:getKey(), recipes:loadRecipes(), entries:state.entries};
+      timezone:(function(){ try{ return Intl.DateTimeFormat().resolvedOptions().timeZone; }catch(e){ return ''; } })(),
+      timezoneOffsetMinutes:-new Date().getTimezoneOffset(),
+      dailyContext:dailyContext(),
+      apiKey:getKey(), recipes:loadRecipes(), entries:exportEntries()};
     var blob=new Blob([JSON.stringify(payload)],{type:'application/json'});
     var a=document.createElement('a');
     a.href=URL.createObjectURL(blob);
