@@ -246,10 +246,14 @@ function parseWhen(raw, now, anchor){
   if(/^(right\s*)?now$/.test(s) || s==='just now' || s==='currently') return now.getTime();
 
   if(anchor){
-    var later = s.match(/^(?:(\d+(?:\.\d+)?)|an?)\s*(minutes?|mins?|m|hours?|hrs?|h)\s*(?:later|after|afterwards?)$/);
+    // "1.5 hours later", "half an hour later", "90 min later", "1 hour 30 min",
+    // "2 hours" — the trailing "later" is optional when a start time exists.
+    var later = s.match(/^(half an?|an?|\d+(?:\.\d+)?)\s*(minutes?|mins?|m|hours?|hrs?|h)(?:\s*(?:and\s*)?(\d+(?:\.\d+)?)\s*(minutes?|mins?|m))?(?:\s*(?:later|after|afterwards?|in))?$/);
     if(later){
-      var ln = later[1] ? parseFloat(later[1]) : 1;
-      return anchor + ln * (later[2][0]==='m' ? 60000 : 3600000);
+      var n1 = /^half/.test(later[1]) ? 0.5 : (/^an?$/.test(later[1]) ? 1 : parseFloat(later[1]));
+      var ms = n1 * (later[2][0]==='m' ? 60000 : 3600000);
+      if(later[3]) ms += parseFloat(later[3]) * 60000;
+      return anchor + ms;
     }
   }
   var ago = s.match(/^(?:(\d+(?:\.\d+)?)|an?)\s*(minutes?|mins?|m|hours?|hrs?|h|days?|d)\s*ago$/);
@@ -307,8 +311,18 @@ function parseWhen(raw, now, anchor){
   if(hour>23 || minute>59) return null;
 
   var out=new Date(day); out.setHours(hour,minute,0,0);
+
+  // A bare time given as an end ("11 pm") means that clock time on the day the
+  // entry STARTED — not today. Sleep needs no special case: the roll-forward
+  // below moves a morning wake-up onto the next day only when it has to.
+  if(!anchored && anchor){
+    var a=new Date(anchor);
+    out=new Date(a.getFullYear(), a.getMonth(), a.getDate(), hour, minute, 0, 0);
+  }
+
   if(anchored && !yearGiven && out.getTime() > now.getTime()+86400000) out.setFullYear(out.getFullYear()-1);
-  if(!anchored && out.getTime() > now.getTime()+90000) out.setDate(out.getDate()-1);
+  // only guess "they meant earlier" when there is no start time to anchor to
+  if(!anchored && !anchor && out.getTime() > now.getTime()+90000) out.setDate(out.getDate()-1);
   if(anchor){ while(out.getTime() < anchor) out.setDate(out.getDate()+1); }
   return out.getTime();
 }
@@ -1167,7 +1181,7 @@ function mountComposer(slot){
     h+='<div class="fld"><div class="lbl">Time finished <span>· optional</span></div>'+
        '<input id="endedText" value="'+esc(d.endedText)+'" placeholder="1 hour later">'+
        '<div class="wrapflex" style="margin-top:6px">'+
-         preset('endedText','1 hour later')+preset('endedText','30 min later')+preset('endedText','right now')+
+         preset('endedText','1.5 hours later')+preset('endedText','30 min later')+preset('endedText','right now')+
        '</div><div id="endNote" class="note"></div></div>';
   }
 
@@ -1230,7 +1244,9 @@ function updateTimeNotes(){
     e2.className='note '+(end?'ok':(d.endedText.trim()?'bad':'faint'));
     e2.textContent = end
       ? '→ '+fmtStamp(end)+(w&&end>w ? '  ('+fmtDur(end-w)+')' : '')
-      : (d.endedText.trim()?'Can\'t read that.':'');
+      : (d.endedText.trim()
+          ? 'Can\'t read that. Try a plain time like "11:30 pm", or "1.5 hours later".'
+          : '');
   }
 }
 
