@@ -15,6 +15,8 @@
     --bg:#EEF1F0; --panel:#fff; --ink:#141C1B; --muted:#63736F; --faint:#8B9995;
     --line:#D3DAD8; --food:#1F6B5B; --foodsoft:#DEEDE8; --sym:#8B3A5C;
     --symsoft:#F3E2E9; --stool:#3A4E7A; --stoolsoft:#E1E6F1; --mark:#1D5FA6;
+    --act:#A0642B; --actsoft:#F2E5D8; --sleep:#2F5E6E; --sleepsoft:#DCE9ED;
+    --body:#5B5470; --bodysoft:#E6E3EC;
     --display:'Iowan Old Style','Palatino Linotype',Palatino,Georgia,serif;
     --body:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
     --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
@@ -37,6 +39,8 @@
        align-items:center;justify-content:center;gap:6px;flex:1}
   .btn.food{background:var(--food)} .btn.symptom{background:var(--sym)}
   .btn.stool{background:var(--stool)}
+  .btn.activity{background:var(--act)} .btn.sleep{background:var(--sleep)}
+  .btn.body{background:var(--body)}
   .btn-out{padding:11px;border-radius:9px;border:1px solid var(--ink);
            background:var(--panel);width:100%;margin-bottom:18px}
   .mini{padding:5px 10px;border-radius:6px;font-size:12px;
@@ -49,6 +53,8 @@
   .chip.symptom.on{background:var(--sym);color:#fff}
   .chip.stool{background:var(--stoolsoft);color:var(--stool);border-color:transparent}
   .chip.stool.on{background:var(--stool);color:#fff}
+  .chip.activity{background:var(--actsoft);color:var(--act);border-color:transparent}
+  .chip.activity.on{background:var(--act);color:#fff}
   input,textarea{width:100%;background:#fff;border:1px solid var(--line);
     border-radius:8px;padding:9px 10px;font-size:15px;color:var(--ink);
     font-family:var(--body);outline:none}
@@ -58,18 +64,26 @@
   .card.food{border-left:3px solid var(--food)}
   .card.symptom{border-left:3px solid var(--sym)}
   .card.stool{border-left:3px solid var(--stool)}
+  .card.activity{border-left:3px solid var(--act)}
+  .card.sleep{border-left:3px solid var(--sleep)}
+  .card.body{border-left:3px solid var(--body)}
   .composer{background:var(--panel);border:1px solid var(--line);border-radius:10px;
             padding:16px;margin-bottom:16px}
   .composer.food{border-top:3px solid var(--food)}
   .composer.symptom{border-top:3px solid var(--sym)}
   .composer.stool{border-top:3px solid var(--stool)}
+  .composer.activity{border-top:3px solid var(--act)}
+  .composer.sleep{border-top:3px solid var(--sleep)}
+  .composer.body{border-top:3px solid var(--body)}
   .fld{margin-bottom:14px}
   .time{font-family:var(--mono);font-size:12px;color:var(--muted);min-width:60px;padding-top:2px}
   .tag{padding:2px 7px;border-radius:5px;font-size:11px;display:inline-block}
   .tag.food{background:var(--foodsoft);color:var(--food)}
   .tag.sym{background:var(--symsoft);color:var(--sym);font-size:13px}
   .tag.stool{background:var(--stoolsoft);color:var(--stool)}
-  .rail{position:relative;height:30px;background:#fff;border:1px solid var(--line);
+  .tag.act{background:var(--actsoft);color:var(--act)}
+  .tag.sleep{background:var(--sleepsoft);color:var(--sleep)}
+  .rail{position:relative;height:42px;background:#fff;border:1px solid var(--line);
         border-radius:6px}
   .rail .grid{position:absolute;top:0;bottom:0;width:1px;background:var(--line)}
   .ticks{display:flex;justify-content:space-between;font-family:var(--mono);
@@ -148,6 +162,7 @@ function migrate(e){
   if(e.kind === 'symptom' && !Array.isArray(e.symptoms))
     e.symptoms = e.symptom ? [{name:e.symptom, severity:e.severity||3}] : [];
   if(e.kind === 'stool' && !Array.isArray(e.flags)) e.flags = [];
+  if(e.kind === 'activity' && !e.activity) e.activity = 'Activity';
   return e;
 }
 
@@ -505,7 +520,41 @@ var SYMS=['Bloating','Gas','Cramping','Nausea','Reflux','Urgency','Headache',
 var SEV=['barely','mild','moderate','strong','severe'];
 var BRISTOL=['Separate hard lumps','Lumpy sausage','Sausage with cracks','Smooth soft sausage','Soft blobs, clear edges','Mushy, ragged edges','Watery, no solids'];
 var FLAGS=['Urgent','Straining','Incomplete','Painful','Mucus','Undigested food','Foul smelling','Floating'];
-var TITLES={food:'Something I ate', symptom:'How I felt', stool:'Bowel movement'};
+var ACTIVITIES=['Tennis','Walking','Standing up'];
+var NO_INTENSITY={'standing up':1};   // duration matters, effort rating doesn't
+var TITLES={food:'Something I ate', symptom:'How I felt', stool:'Bowel movement',
+  activity:'Physical activity', sleep:'Sleep', body:'Weight'};
+
+/* Activity, sleep and body logging arrived partway through this diary. Before
+   this date there is no information either way; after it, silence means
+   sitting. Recorded once, on first run of the version that added them. */
+var SINCE_KEY='food-diary:activity-since';
+function activitySince(){
+  try{
+    var v=localStorage.getItem(SINCE_KEY);
+    if(v) return +v;
+    var t=startOfDay(new Date()).getTime();
+    localStorage.setItem(SINCE_KEY, String(t));
+    return t;
+  }catch(e){ return startOfDay(new Date()).getTime(); }
+}
+function isoDay(t){
+  var d=new Date(t);
+  return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2);
+}
+
+/* The recorded cutoff, pulled earlier if anything was backdated before it —
+   logging yesterday's tennis should not put it outside the tracked period. */
+function effectiveSince(){
+  var t=activitySince();
+  (state.entries||[]).forEach(function(e){
+    if(e.kind==='activity'||e.kind==='sleep'||e.kind==='body'){
+      var d=startOfDay(new Date(e.when)).getTime();
+      if(d<t) t=d;
+    }
+  });
+  return t;
+}
 
 
 /* ---------------- ingredient knowledge ----------------
@@ -724,12 +773,16 @@ function footerHTML(){
 
 function render(){
   var app=document.getElementById('app');
-  var c={food:0,symptom:0,stool:0};
-  state.entries.forEach(function(e){ c[e.kind]++; });
+  var c={food:0,symptom:0,stool:0,activity:0,sleep:0,body:0};
+  state.entries.forEach(function(e){ if(c[e.kind]!==undefined) c[e.kind]++; });
 
   var html='';
   html+='<div style="display:flex;justify-content:space-between;align-items:flex-start">';
-  html+='<div><h1>What I ate, how I felt</h1><div class="sub">'+c.food+' meals · '+c.symptom+' symptoms · '+c.stool+' movements</div></div>';
+  var bits=[c.food+' meals', c.symptom+' symptoms', c.stool+' movements'];
+  if(c.activity) bits.push(c.activity+' activities');
+  if(c.sleep) bits.push(c.sleep+' nights');
+  if(c.body) bits.push(c.body+' weigh-ins');
+  html+='<div><h1>What I ate, how I felt</h1><div class="sub">'+bits.join(' · ')+'</div></div>';
   html+='<button class="mini" data-act="settings">Settings</button></div>';
 
   if(location.protocol==='file:' || location.protocol==='content:'){
@@ -745,8 +798,10 @@ function render(){
 
   if(state.showSettings) html+=settingsHTML();
 
-  html+='<div class="row" style="margin-bottom:14px">'+
+  html+='<div class="row" style="margin-bottom:8px">'+
     btn('food','Food')+btn('symptom','Symptom')+btn('stool','Stool')+'</div>';
+  html+='<div class="row" style="margin-bottom:14px">'+
+    btn('activity','Activity')+btn('sleep','Sleep')+btn('body','Weight')+'</div>';
   html+='<div id="composer-top"></div>';
 
   if(state.entries.length>=2)
@@ -810,14 +865,22 @@ function railHTML(dayStart, list){
   [6,12,18].forEach(function(x){ h+='<div class="grid" style="left:'+(x/24*100)+'%"></div>'; });
   list.forEach(function(e){
     var at=(e.when-dayStart)/86400000*100;
-    if(e.kind==='symptom'){
+    function span(topPx, colour, opacity, minW){
       var end = e.endedAt ? Math.min(e.endedAt, dayStart+86400000) : e.when+1800000;
-      var w = Math.max((end-e.when)/86400000*100, 1.2);
-      var peak = (e.symptoms||[]).reduce(function(a,s){ return Math.max(a, s.severity||3); }, 3);
-      h+='<div style="position:absolute;left:'+at+'%;width:'+w+'%;top:4px;height:7px;border-radius:4px;background:var(--sym);opacity:'+(0.35+0.13*peak)+'"></div>';
+      var w = Math.max((end-Math.max(e.when,dayStart))/86400000*100, minW||1.2);
+      return '<div style="position:absolute;left:'+at+'%;width:'+w+'%;top:'+topPx+
+        'px;height:6px;border-radius:3px;background:'+colour+';opacity:'+opacity+'"></div>';
+    }
+    if(e.kind==='symptom'){
+      var peak=(e.symptoms||[]).reduce(function(a,s){ return Math.max(a, s.severity||3); }, 3);
+      h+=span(4,'var(--sym)',0.35+0.13*peak);
+    } else if(e.kind==='activity'){
+      h+=span(12,'var(--act)',0.45+0.11*(e.intensity||3));
+    } else if(e.kind==='sleep'){
+      h+=span(20,'var(--sleep)',0.75);
     } else if(e.kind==='stool'){
-      h+='<div style="position:absolute;left:calc('+at+'% - 4px);top:15px;width:8px;height:8px;background:var(--stool);transform:rotate(45deg)"></div>';
-    } else {
+      h+='<div style="position:absolute;left:calc('+at+'% - 4px);bottom:4px;width:8px;height:8px;background:var(--stool);transform:rotate(45deg)"></div>';
+    } else if(e.kind==='food'){
       h+='<div style="position:absolute;left:calc('+at+'% - 4px);bottom:4px;width:8px;height:8px;border-radius:8px;background:var(--food)"></div>';
     }
   });
@@ -827,7 +890,7 @@ function railHTML(dayStart, list){
 
 function cardHTML(e){
   var h='<div class="card '+e.kind+'"><div style="display:flex;gap:12px;align-items:flex-start">';
-  h+='<div class="time">'+fmtTime(e.when)+'</div><div style="flex:1;min-width:0">';
+  h+='<div class="time">'+(e.kind==='sleep'?'bed':fmtTime(e.when))+'</div><div style="flex:1;min-width:0">';
 
   if(e.kind==='food'){
     h+='<div>'+esc(e.description)+(e.quantity?' <span class="muted">· '+esc(e.quantity)+'</span>':'')+'</div>';
@@ -856,6 +919,25 @@ function cardHTML(e){
       e.flags.forEach(function(f){ h+='<span class="tag stool">'+esc(f)+'</span>'; });
       h+='</div>';
     }
+  }
+  if(e.kind==='activity'){
+    h+='<div>'+esc(e.activity)+
+       (e.intensity?'<span class="mono" style="font-size:12px;color:var(--act)"> '+e.intensity+'/5</span>':'')+
+       '</div><div class="mono tiny muted" style="margin-top:5px">'+
+       (e.endedAt ? 'until '+fmtTime(e.endedAt)+' · '+fmtDur(e.endedAt-e.when)
+                  : 'no end time recorded')+'</div>';
+  }
+  if(e.kind==='sleep'){
+    h+='<div>'+(e.endedAt ? fmtDur(e.endedAt-e.when)+' in bed' : 'lay down')+'</div>'+
+       '<div class="mono tiny muted" style="margin-top:5px">'+fmtTime(e.when)+
+       (e.endedAt?' → '+fmtTime(e.endedAt):' → not recorded')+'</div>';
+  }
+  if(e.kind==='body'){
+    var parts=[];
+    if(e.weight!=null) parts.push(e.weight+' '+(e.weightUnit||''));
+    if(e.waterPct!=null) parts.push(e.waterPct+'% water');
+    if(e.bodyFatPct!=null) parts.push(e.bodyFatPct+'% fat');
+    h+='<div>'+esc(parts.join(' · '))+'</div>';
   }
   if(e.notes) h+='<div class="small muted" style="margin-top:7px">'+esc(e.notes)+'</div>';
 
@@ -996,6 +1078,12 @@ function newDraft(kind, e){
     endedText: et,
     bristol: e ? e.bristol||4 : 4,
     flags: e ? (e.flags||[]).slice() : [],
+    activity: e ? e.activity||'' : '',
+    intensity: e ? e.intensity||3 : 3,
+    weight: e ? (e.weight!=null?String(e.weight):'') : '',
+    weightUnit: e ? e.weightUnit||'lb' : 'lb',
+    waterPct: e ? (e.waterPct!=null?String(e.waterPct):'') : '',
+    bodyFatPct: e ? (e.bodyFatPct!=null?String(e.bodyFatPct):'') : '',
     notes: e ? e.notes||'' : ''
   };
 }
@@ -1007,7 +1095,11 @@ function mountComposer(slot){
      '<div style="font-family:var(--display);font-size:18px">'+(state.composer.id?'Edit · ':'')+TITLES[kind]+'</div>'+
      '<button class="faint" data-act="closeComposer">Close</button></div>';
 
-  h+='<div class="fld"><div class="lbl">'+(kind==='symptom'?'When it started':'When')+'</div>'+
+  var whenLabel = kind==='symptom' ? 'When it started'
+    : kind==='activity' ? 'Time started'
+    : kind==='sleep' ? 'Time I lay down'
+    : kind==='body' ? 'When I weighed in' : 'When';
+  h+='<div class="fld"><div class="lbl">'+whenLabel+'</div>'+
      '<input id="whenText" value="'+esc(d.whenText)+'" placeholder="August 26 8:30 pm">'+
      '<div class="wrapflex" style="margin-top:6px">'+
        preset('whenText','right now')+preset('whenText','1 hour ago')+
@@ -1053,6 +1145,37 @@ function mountComposer(slot){
        '<div id="flagChips" class="wrapflex"></div></div>';
   }
 
+  if(kind==='activity'){
+    h+='<div class="fld"><div class="lbl">What I did</div>'+
+       '<div id="actChips" class="wrapflex"></div>'+
+       '<div class="lbl" style="margin-top:10px">Or type anything else</div>'+
+       '<input id="activityName" value="'+esc(d.activity)+'" placeholder="e.g. cycling, gardening"></div>';
+    h+='<div class="fld" id="intensityBlock"></div>';
+    h+='<div class="fld"><div class="lbl">Time finished <span>· optional</span></div>'+
+       '<input id="endedText" value="'+esc(d.endedText)+'" placeholder="1 hour later">'+
+       '<div class="wrapflex" style="margin-top:6px">'+
+         preset('endedText','1 hour later')+preset('endedText','30 min later')+preset('endedText','right now')+
+       '</div><div id="endNote" class="note"></div></div>';
+  }
+
+  if(kind==='sleep'){
+    h+='<div class="fld"><div class="lbl">Time I got out of bed</div>'+
+       '<input id="endedText" value="'+esc(d.endedText)+'" placeholder="7:15 am">'+
+       '<div class="wrapflex" style="margin-top:6px">'+
+         preset('endedText','right now')+preset('endedText','7 am')+preset('endedText','8 hours later')+
+       '</div><div id="endNote" class="note"></div></div>';
+  }
+
+  if(kind==='body'){
+    h+='<div class="fld"><div class="lbl">Weight</div><div class="row">'+
+       '<input id="weight" inputmode="decimal" value="'+esc(d.weight)+'" placeholder="178.4">'+
+       '<button class="mini" data-act="unit" style="padding:0 16px">'+d.weightUnit+'</button></div></div>';
+    h+='<div class="fld"><div class="lbl">Body water % <span>· optional</span></div>'+
+       '<input id="waterPct" inputmode="decimal" value="'+esc(d.waterPct)+'" placeholder="55.2"></div>';
+    h+='<div class="fld"><div class="lbl">Body fat % <span>· optional</span></div>'+
+       '<input id="bodyFatPct" inputmode="decimal" value="'+esc(d.bodyFatPct)+'" placeholder="18.6"></div>';
+  }
+
   h+='<div class="fld"><div class="lbl">Notes <span>· optional</span></div>'+
      '<textarea id="notes">'+esc(d.notes)+'</textarea></div>';
   h+='<div class="row"><button class="btn '+kind+'" data-act="save" id="saveBtn">'+
@@ -1061,15 +1184,18 @@ function mountComposer(slot){
   h+='</div>';
   slot.innerHTML=h;
 
-  ['whenText','description','quantity','endedText','notes'].forEach(function(f){
+  ['whenText','description','quantity','endedText','notes',
+   'activityName','weight','waterPct','bodyFatPct'].forEach(function(f){
     var el=document.getElementById(f);
     if(el) el.addEventListener('input', function(){
-      state.draft[f]=el.value;
+      state.draft[f==='activityName'?'activity':f]=el.value;
       if(f==='whenText'||f==='endedText') updateTimeNotes();
       if(f==='description'){ validate(); paintRecipeHit(); }
+      if(f==='activityName'){ paintActivity(); validate(); }
+      if(f==='weight') validate();
     });
   });
-  paintIngredients(); paintSymptoms(); paintStool(); paintRecipeHit();
+  paintIngredients(); paintSymptoms(); paintStool(); paintActivity(); paintRecipeHit();
   updateTimeNotes(); validate();
 }
 
@@ -1089,7 +1215,9 @@ function updateTimeNotes(){
   if(e2){
     var end=d.endedText.trim()?parseWhen(d.endedText,new Date(),w||undefined):null;
     e2.className='note '+(end?'ok':(d.endedText.trim()?'bad':'faint'));
-    e2.textContent = end ? '→ '+fmtStamp(end) : (d.endedText.trim()?'Can\'t read that.':'');
+    e2.textContent = end
+      ? '→ '+fmtStamp(end)+(w&&end>w ? '  ('+fmtDur(end-w)+')' : '')
+      : (d.endedText.trim()?'Can\'t read that.':'');
   }
 }
 
@@ -1153,6 +1281,24 @@ function paintSymptoms(){
   }).join('');
 }
 
+function paintActivity(){
+  var box=document.getElementById('actChips'); if(!box) return;
+  var d=state.draft, cur=(d.activity||'').toLowerCase();
+  box.innerHTML=ACTIVITIES.map(function(a){
+    return '<button class="chip activity'+(cur===a.toLowerCase()?' on':'')+
+      '" data-act="setActivity" data-val="'+esc(a)+'">'+esc(a)+'</button>';
+  }).join('');
+
+  var ib=document.getElementById('intensityBlock'); if(!ib) return;
+  if(!d.activity || NO_INTENSITY[cur]){ ib.innerHTML=''; return; }
+  ib.innerHTML='<div class="lbl">How hard <span>· 1 easy, 5 all out</span></div><div class="row">'+
+    [1,2,3,4,5].map(function(n){
+      var on=d.intensity===n;
+      return '<button class="num'+(on?' on':'')+'" data-act="intensity" data-n="'+n+'"'+
+        (on?' style="background:var(--act);border-color:var(--act)"':'')+'>'+n+'</button>';
+    }).join('')+'</div>';
+}
+
 function paintStool(){
   var row=document.getElementById('bristolRow'); if(!row) return;
   var d=state.draft;
@@ -1171,8 +1317,13 @@ function paintStool(){
 
 function validate(){
   var d=state.draft, b=document.getElementById('saveBtn'); if(!b) return;
-  var ok = parseWhen(d.whenText)!==null &&
-    (d.kind==='food' ? d.description.trim()!=='' : d.kind==='symptom' ? d.symptoms.length>0 : true);
+  var timeOK = (d.origWhen && d.whenText===d.origWhenText) || parseWhen(d.whenText)!==null;
+  var ok = timeOK && (
+    d.kind==='food'     ? d.description.trim()!=='' :
+    d.kind==='symptom'  ? d.symptoms.length>0 :
+    d.kind==='activity' ? d.activity.trim()!=='' :
+    d.kind==='body'     ? (parseFloat(d.weight)>0) :
+    true);
   b.style.opacity = ok?1:0.45;
   b.disabled=!ok;
 }
@@ -1183,7 +1334,7 @@ function saveDraft(){
   var when = (d.origWhen && d.whenText===d.origWhenText) ? d.origWhen : parseWhen(d.whenText);
   if(when===null) return;
   var end = null;
-  if(d.kind==='symptom' && d.endedText.trim()){
+  if((d.kind==='symptom'||d.kind==='activity'||d.kind==='sleep') && d.endedText.trim()){
     end = (d.origEnded && d.endedText===d.origEndedText)
       ? d.origEnded
       : parseWhen(d.endedText, new Date(), when);
@@ -1191,10 +1342,16 @@ function saveDraft(){
   var now=Date.now();
   var payload={
     kind:d.kind, when:when, whenText:d.whenText,
-    endedAt:end, endedText:d.kind==='symptom'?d.endedText:'',
+    endedAt:end, endedText:(d.kind==='symptom'||d.kind==='activity'||d.kind==='sleep')?d.endedText:'',
     description:d.description.trim(), quantity:d.quantity.trim(),
     ingredients:d.ingredients, symptoms:d.kind==='symptom'?d.symptoms:[],
     bristol:d.kind==='stool'?d.bristol:null, flags:d.kind==='stool'?d.flags:[],
+    activity:d.kind==='activity'?d.activity.trim():'',
+    intensity:(d.kind==='activity' && !NO_INTENSITY[(d.activity||'').toLowerCase()])?d.intensity:null,
+    weight:d.kind==='body'&&d.weight!==''?parseFloat(d.weight):null,
+    weightUnit:d.kind==='body'?d.weightUnit:'',
+    waterPct:d.kind==='body'&&d.waterPct!==''?parseFloat(d.waterPct):null,
+    bodyFatPct:d.kind==='body'&&d.bodyFatPct!==''?parseFloat(d.bodyFatPct):null,
     notes:d.notes.trim(), updatedAt:now
   };
   if(state.composer.id){
@@ -1235,6 +1392,33 @@ var INSTRUCTIONS =
 '"cleared":[{"name":"","why":""}],"timing":"","gaps":[""],"nextSteps":[""]}\n'+
 "Max 4 suspects, 3 cleared, 2 gaps, 3 nextSteps, every string under 25 words. The reply is capped, so a short complete object beats a long truncated one.";
 
+function dailySummary(){
+  var since=effectiveSince(), byDay={};
+  state.entries.forEach(function(e){
+    if(e.when < since) return;
+    var k=isoDay(startOfDay(new Date(e.when)).getTime());
+    if(!byDay[k]) byDay[k]={mins:0, acts:[], sleep:null, weight:null, symptoms:0};
+    var D=byDay[k];
+    if(e.kind==='activity'){
+      if(e.endedAt) D.mins += Math.round((e.endedAt-e.when)/60000);
+      D.acts.push(e.activity+(e.intensity?' '+e.intensity+'/5':''));
+    }
+    if(e.kind==='sleep' && e.endedAt) D.sleep=fmtDur(e.endedAt-e.when);
+    if(e.kind==='body' && e.weight!=null) D.weight=e.weight+(e.weightUnit||'');
+    if(e.kind==='symptom') D.symptoms++;
+  });
+  var keys=Object.keys(byDay).sort();
+  if(!keys.length) return 'Nothing logged since the activity cutoff yet.';
+  return keys.map(function(k){
+    var D=byDay[k];
+    return k+': '+(D.acts.length ? D.acts.join(', ')+' — '+D.mins+' active minutes'
+                                 : 'no activity logged (mostly sitting)')+
+      (D.sleep?'; '+D.sleep+' in bed':'')+
+      (D.weight?'; weight '+D.weight:'')+
+      '; '+D.symptoms+' symptom entries';
+  }).join('\n');
+}
+
 function logText(){
   return state.entries.slice().sort(function(a,b){return a.when-b.when;}).slice(-160).map(function(e){
     var d=new Date(e.when);
@@ -1248,6 +1432,16 @@ function logText(){
         }).join(', '):'')+(e.notes?' | note: '+e.notes:'');
     if(e.kind==='stool')
       return stamp+' | STOOL | Bristol '+e.bristol+(e.flags.length?' | '+e.flags.join(', '):'')+(e.notes?' | note: '+e.notes:'');
+    if(e.kind==='activity')
+      return stamp+' | ACTIVITY | '+e.activity+(e.intensity?' intensity '+e.intensity+'/5':'')+
+        ' | '+(e.endedAt?fmtDur(e.endedAt-e.when):'no end time recorded')+(e.notes?' | note: '+e.notes:'');
+    if(e.kind==='sleep')
+      return stamp+' | SLEEP | lay down; '+(e.endedAt?'out of bed after '+fmtDur(e.endedAt-e.when):'wake time not recorded')+
+        (e.notes?' | note: '+e.notes:'');
+    if(e.kind==='body')
+      return stamp+' | WEIGHT | '+(e.weight!=null?e.weight+(e.weightUnit||''):'')+
+        (e.waterPct!=null?', water '+e.waterPct+'%':'')+
+        (e.bodyFatPct!=null?', body fat '+e.bodyFatPct+'%':'')+(e.notes?' | note: '+e.notes:'');
     return stamp+' | SYMPTOM | '+(e.symptoms||[]).map(function(s){return s.name+' '+s.severity+'/5';}).join(', ')+
       ' | '+(e.endedAt?'eased after '+fmtDur(e.endedAt-e.when):'end time not recorded')+(e.notes?' | note: '+e.notes:'');
   }).join('\n');
@@ -1274,6 +1468,12 @@ function runAnalysis(){
     "smaller ones are reported as trace exposures and excluded from the rates.\n\n"+
     "COMPUTED RATES (adverse event within "+s.windowH+" h of a meal; "+s.meals+" meals, "+
     s.events+" events, baseline "+pc(s.baseRate)+" 95% CI "+pc(s.baseCI[0])+"-"+pc(s.baseCI[1])+"):\n"+table+
+    "\n\nACTIVITY, SLEEP AND WEIGHT: logging for these began on "+isoDay(effectiveSince())+
+    ". Before that date their absence means nothing was recorded, NOT that the user was inactive — draw "+
+    "no activity conclusions about those days. From that date onward, a day with no activity entry was a "+
+    "mostly sitting day, and on days with activity entries the uncovered hours were spent sitting or lying "+
+    "down. Sleep entries are time in bed, not time asleep.\n"+
+    "\nDAILY SUMMARY (activity cutoff onward):\n"+dailySummary()+
     "\n\nUNTESTED COMMON TRIGGERS (absent from the log entirely, so no conclusion is possible "+
     "about them — mention this only if it matters): "+
     COMMON_TRIGGERS.filter(function(t){
@@ -1625,6 +1825,16 @@ document.addEventListener('click', function(ev){
     paintSymptoms();
   }
   else if(act==='bristol'){ d.bristol=+t.getAttribute('data-n'); paintStool(); }
+  else if(act==='setActivity'){
+    d.activity=val;
+    var ael=document.getElementById('activityName'); if(ael) ael.value=val;
+    paintActivity(); validate();
+  }
+  else if(act==='intensity'){ d.intensity=+t.getAttribute('data-n'); paintActivity(); }
+  else if(act==='unit'){
+    d.weightUnit = d.weightUnit==='lb' ? 'kg' : 'lb';
+    t.textContent=d.weightUnit;
+  }
   else if(act==='togFlag'){
     var i2=d.flags.indexOf(val);
     if(i2>=0) d.flags.splice(i2,1); else d.flags.push(val);
@@ -1663,8 +1873,28 @@ document.addEventListener('click', function(ev){
   }
   else if(act==='export'){
     try{ localStorage.setItem('food-diary:lastbackup', String(Date.now())); }catch(e){}
-    var payload={app:'food-diary', version:2, exportedAt:Date.now(),
-                 apiKey:getKey(), recipes:loadRecipes(), entries:state.entries};
+    var since=effectiveSince();
+    var payload={
+      app:'food-diary', version:3, exportedAt:Date.now(),
+      activityTrackingSince: since,
+      activityTrackingSinceDate: isoDay(since),
+      readMeBeforeAnalysing: {
+        purpose: 'Personal food, symptom, stool, activity, sleep and weight diary.',
+        entryKinds: 'food, symptom, stool (Bristol 1-7), activity, sleep, body (weight).',
+        activityCutoff: 'Physical activity, sleep and weight logging were added on ' + isoDay(since) +
+          '. For dates BEFORE that, there is no activity, sleep or weight information either way. ' +
+          'Absence is UNKNOWN, not zero. Do not infer those days were sedentary, and do not compare ' +
+          'activity levels across the cutoff.',
+        activityAfterCutoff: 'From ' + isoDay(since) + ' onward, absence IS informative. A day with no ' +
+          'activity entry was a mostly sitting day with no prolonged movement. On a day that does have ' +
+          'activity entries, the hours not covered by one were spent sitting or lying down.',
+        sleepEntries: 'A sleep entry records when the user lay down (when) and got out of bed (endedAt). ' +
+          'That is time in bed, not necessarily time asleep.',
+        doseModel: 'Food ingredients carry a dose in servings, where 1.0 is a standalone portion. ' +
+          'Composite foods contribute fractions — the onion inside ketchup is about 0.04 servings. ' +
+          'Do not treat a trace as a real exposure.'
+      },
+      apiKey:getKey(), recipes:loadRecipes(), entries:state.entries};
     var blob=new Blob([JSON.stringify(payload)],{type:'application/json'});
     var a=document.createElement('a');
     a.href=URL.createObjectURL(blob);
