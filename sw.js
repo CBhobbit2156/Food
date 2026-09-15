@@ -7,7 +7,7 @@
 
    Bump CACHE when you change index.html, or browsers will keep serving the
    old copy from cache. */
-var CACHE = 'food-diary-v9';
+var CACHE = 'food-diary-v10';
 var SHELL = [
   './',
   './index.html',
