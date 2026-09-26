@@ -248,9 +248,14 @@ function parseWhen(raw, now, anchor){
   if(anchor){
     // "1.5 hours later", "half an hour later", "90 min later", "1 hour 30 min",
     // "2 hours" — the trailing "later" is optional when a start time exists.
-    var later = s.match(/^(half an?|an?|\d+(?:\.\d+)?)\s*(minutes?|mins?|m|hours?|hrs?|h)(?:\s*(?:and\s*)?(\d+(?:\.\d+)?)\s*(minutes?|mins?|m))?(?:\s*(?:later|after|afterwards?|in))?$/);
+    var later = s.match(/^(three quarters of an?|a quarter of an?|quarter of an?|half an?|an?|\d*\.?\d+)\s*(minutes?|mins?|m|hours?|hrs?|h)(?:\s*(?:and\s*)?(\d*\.?\d+)\s*(minutes?|mins?|m))?(?:\s*(?:later|after|afterwards?|in))?$/);
     if(later){
-      var n1 = /^half/.test(later[1]) ? 0.5 : (/^an?$/.test(later[1]) ? 1 : parseFloat(later[1]));
+      var w=later[1];
+      var n1 = /^three quarters/.test(w) ? 0.75
+             : /quarter/.test(w) ? 0.25
+             : /^half/.test(w) ? 0.5
+             : /^an?$/.test(w) ? 1
+             : parseFloat(w);
       var ms = n1 * (later[2][0]==='m' ? 60000 : 3600000);
       if(later[3]) ms += parseFloat(later[3]) * 60000;
       return anchor + ms;
@@ -551,9 +556,9 @@ function activityMeaning(name){ return ACTIVITY_MEANING[String(name||'').toLower
 var TITLES={food:'Something I ate', symptom:'How I felt', stool:'Bowel movement',
   activity:'Physical activity', sleep:'Sleep', body:'Weight'};
 
-/* Activity, sleep and body logging arrived partway through this diary. Before
-   this date there is no information either way; after it, silence means
-   sitting. Recorded once, on first run of the version that added them. */
+/* Date the activity, sleep and weight buttons first appeared. Manual logging
+   of them was later abandoned as too laborious, so on NO day does a missing
+   entry mean anything. Health Connect is the source of truth for activity. */
 var SINCE_KEY='food-diary:activity-since';
 function activitySince(){
   try{
@@ -1461,7 +1466,6 @@ function exportEntries(){
 
 function dailyContext(){
   if(!state.entries.length) return [];
-  var sinceDay=startOfDay(new Date(effectiveSince())).getTime();
   var times=state.entries.map(function(e){ return e.when; });
   var first=startOfDay(new Date(Math.min.apply(null,times))).getTime();
   var last=startOfDay(new Date(Math.max.apply(null,times))).getTime();
@@ -1469,7 +1473,6 @@ function dailyContext(){
   for(var t=first; t<=last+1; t+=86400000){
     var dayStart=startOfDay(new Date(t)).getTime(), dayEnd=dayStart+86400000;
     if(dayStart>last) break;
-    var tracked = dayStart >= sinceDay;
     var acts=[], sleeps=[], mins=0, meals=0, symptoms=0, stools=0;
     state.entries.forEach(function(e){
       if(e.when < dayStart || e.when >= dayEnd) return;
@@ -1488,21 +1491,19 @@ function dailyContext(){
       if(e.kind==='symptom') symptoms++;
       if(e.kind==='stool') stools++;
     });
-    var row={date:isoDay(dayStart), activityTracked:tracked, meals:meals,
+    var row={date:isoDay(dayStart), meals:meals,
              symptomEntries:symptoms, stoolEntries:stools,
-             activities:acts, activeMinutes:tracked?mins:null, sleep:sleeps};
-    if(!tracked){
-      row.whatIsKnownAboutActivity='NOTHING. Activity, sleep and weight were not being logged on this '+
-        'date. Absence of activity data here means unrecorded, NOT inactive. Draw no conclusion about '+
-        'how active or sedentary the user was on this day, and do not compare it with tracked days.';
-    } else if(!acts.length){
-      row.whatIsKnownAboutActivity='No activity was logged on this tracked day, which means a mostly '+
-        'sitting day with no prolonged movement.'+
-        (sleeps.length?' Apart from the sleep intervals listed, when the user was lying down.':'');
+             manualActivityEntries:acts, manuallyLoggedActiveMinutes:mins,
+             manualSleepEntries:sleeps,
+             activitySource:'Health Connect — see healthConnect at the top of this file'};
+    if(!acts.length && !sleeps.length){
+      row.whatIsKnownAboutActivity='NOTHING from this file. No manual activity or sleep entry exists for '+
+        'this day, and that means nothing about how active the user was: manual activity logging was '+
+        'abandoned as too laborious. Do NOT infer a sedentary day. Pull this date from Health Connect.';
     } else {
-      row.whatIsKnownAboutActivity='The activities listed are the only physical activity on this day, '+
-        'totalling '+mins+' active minutes. The user was lying down during the sleep intervals listed '+
-        'and sitting during all other hours.';
+      row.whatIsKnownAboutActivity='The manual entries listed are true for the intervals they cover but '+
+        'are NOT a complete account of the day — manual logging was sporadic and later abandoned. Do NOT '+
+        'assume the uncovered hours were sitting. Pull this date from Health Connect for the full picture.';
     }
     out.push(row);
   }
@@ -1529,7 +1530,7 @@ function dailySummary(){
   return keys.map(function(k){
     var D=byDay[k];
     return k+': '+(D.acts.length ? D.acts.join(', ')+' — '+D.mins+' active minutes'
-                                 : 'no activity logged (mostly sitting)')+
+                                 : 'no manual activity entry (UNKNOWN — not sedentary)')+
       (D.sleep?'; '+D.sleep+' in bed':'')+
       (D.weight?'; weight '+D.weight:'')+
       '; '+D.symptoms+' symptom entries';
@@ -1585,16 +1586,15 @@ function runAnalysis(){
     "smaller ones are reported as trace exposures and excluded from the rates.\n\n"+
     "COMPUTED RATES (adverse event within "+s.windowH+" h of a meal; "+s.meals+" meals, "+
     s.events+" events, baseline "+pc(s.baseRate)+" 95% CI "+pc(s.baseCI[0])+"-"+pc(s.baseCI[1])+"):\n"+table+
-    "\n\nACTIVITY, SLEEP AND WEIGHT: logging for these began on "+isoDay(effectiveSince())+
-    ". Before that date their absence means nothing was recorded, NOT that the user was inactive — draw "+
-    "no activity conclusions about those days. From that date onward, a day with no activity entry was a "+
-    "mostly sitting day, and on days with activity entries the uncovered WAKING hours were spent sitting. "+
-    "Treat the full span of every sleep entry as lying down, not as sedentary waking time, and exclude "+
-    "sleep intervals when judging how long the user was upright. Sleep entries are time in bed, not time "+
-    "asleep. Activity types: Tennis is sustained exertion; Walking is continuous walking; Standing up is "+
+    "\n\nACTIVITY AND SLEEP: manual logging of these was abandoned as too laborious, so it is INCOMPLETE "+
+    "on every day. A logged activity or sleep entry is true for its interval. A missing one means NOTHING — "+
+    "never read a day without an activity entry as sedentary, and never compare days by their logged "+
+    "active minutes. The user's Health Connect data (steps, heart rate, exercise, sleep) is the source of "+
+    "truth for activity; it is not available to this in-app analysis, so limit activity conclusions to "+
+    "what logged entries positively show. Sleep entries are time in bed, not time asleep. Activity types: Tennis is sustained exertion; Walking is continuous walking; Standing up is "+
     "stationary standing; Mixed is walking, standing and sitting together with no sustained exertion (for "+
     "example playing with children) — light intermittent activity, neither sedentary nor a workout.\n"+
-    "\nDAILY SUMMARY (activity cutoff onward):\n"+dailySummary()+
+    "\nDAILY SUMMARY (manual entries only — incomplete):\n"+dailySummary()+
     "\n\nUNTESTED COMMON TRIGGERS (absent from the log entirely, so no conclusion is possible "+
     "about them — mention this only if it matters): "+
     COMMON_TRIGGERS.filter(function(t){
@@ -1995,44 +1995,85 @@ document.addEventListener('click', function(ev){
   else if(act==='export'){
     try{ localStorage.setItem('food-diary:lastbackup', String(Date.now())); }catch(e){}
     var since=effectiveSince();
+    var dayRows=dailyContext();
+    var datesLogged=dayRows.map(function(r){ return r.date; });
+    var tzName=(function(){ try{ return Intl.DateTimeFormat().resolvedOptions().timeZone; }catch(e){ return ''; } })();
+    var tzOff=-new Date().getTimezoneOffset();
     var payload={
-      app:'food-diary', version:4, exportedAt:Date.now(), exportedAtLocal:localStamp(Date.now()),
-      activityTrackingSince: since,
-      activityTrackingSinceDate: isoDay(since),
+      app:'food-diary', version:5, exportedAt:Date.now(), exportedAtLocal:localStamp(Date.now()),
+      manualActivityLoggingBegan: isoDay(since),
+      manualActivityLoggingStatus: 'ABANDONED. The user stopped logging activity and sleep by hand '+
+        'because it was too laborious. Entries that exist are true; missing entries mean nothing.',
+      datesLogged: datesLogged,
+      dateRange: {first: datesLogged[0]||null, last: datesLogged[datesLogged.length-1]||null,
+                  timezone: tzName, utcOffsetMinutes: tzOff},
+
+      healthConnect: {
+        READ_THIS_FIRST: 'Activity and sleep in this file are incomplete on every day. Do not infer '+
+          'inactivity from a missing entry, ever. The user has granted Claude access to their Google '+
+          'Health Connect data; use it to fill in activity and sleep for EVERY date in datesLogged above.',
+        why: 'Manual activity logging was abandoned as too laborious. The manual entries that exist are '+
+          'accurate for the intervals they cover but say nothing about the rest of the day.',
+        tools: 'Claude device tools health_connect_data_types_v0 and health_connect_query_v0. These run on '+
+          'the user\'s phone through the Claude Android app and are reachable only in a turn the user sent '+
+          'from that app. If they are not available, say so plainly and do NOT substitute assumptions '+
+          'about activity.',
+        workflow: [
+          '1. Call health_connect_data_types_v0 with no filter to learn which record types this device '+
+             'actually has and which aggregations each supports. Do not assume a type exists.',
+          '2. For each day in datesLogged, query local midnight to local midnight. This file gives the '+
+             'time zone and UTC offset in dateRange; health_connect_query_v0 takes ISO 8601 UTC, so '+
+             'convert local day boundaries before querying. Use bucket_by "period", 1 day, over the '+
+             'whole dateRange rather than one call per day.',
+          '3. Pull, where the device has them: steps (sum), distance (sum), exercise sessions (records, '+
+             'with type and duration), active and total calories (sum), heart rate (average, min, max), '+
+             'resting heart rate (average), heart rate variability (average), sleep sessions (records: '+
+             'start, end, duration, stages if present), and any other type the discovery call lists '+
+             'that could bear on symptoms (respiratory rate, oxygen saturation, weight, body fat).',
+          '4. Treat Health Connect as the source of truth for how active the user was and how they '+
+             'slept. Treat manual entries as context only — they add what the activity WAS (Tennis 4/5, '+
+             'Mixed with the kids) and how hard it felt, which Health Connect cannot know.',
+          '5. Build one row per date combining both, and only then look for relationships between '+
+             'activity or sleep and symptoms.'
+        ],
+        doNot: [
+          'Do not read manuallyLoggedActiveMinutes as the day\'s activity; it is only what was typed in.',
+          'Do not compare days by their manual entries.',
+          'Do not assume any interval was sitting or lying down unless Health Connect or a manual entry says so.'
+        ]
+      },
+
       readMeBeforeAnalysing: {
         purpose: 'Personal food, symptom, stool, activity, sleep and weight diary.',
         entryKinds: 'food, symptom, stool (Bristol 1-7), activity, sleep, body (weight).',
-        activityCutoff: 'Physical activity, sleep and weight logging were added on ' + isoDay(since) +
-          '. For dates BEFORE that, there is no activity, sleep or weight information either way. ' +
-          'Absence is UNKNOWN, not zero. Do not infer those days were sedentary, and do not compare ' +
-          'activity levels across the cutoff.',
-        activityAfterCutoff: 'From ' + isoDay(since) + ' onward, absence IS informative. A day with no ' +
-          'activity entry was a mostly sitting day with no prolonged movement. On a day that does have ' +
-          'activity entries, the waking hours not covered by one were spent sitting.',
+        manualActivityLogging: 'The activity, sleep and weight buttons were added on ' + isoDay(since) +
+          ' and the user then stopped using them because logging by hand was too laborious. So on EVERY '+
+          'date in this file, a missing activity or sleep entry is UNKNOWN, not zero. Never infer a '+
+          'sedentary day or a sleepless night from absence. See the healthConnect block at the top of '+
+          'this file for where the real activity and sleep data comes from.',
         sleepEntries: 'A sleep entry records when the user lay down (when) and got out of bed (endedAt). ' +
           'That is time in bed, not necessarily time asleep.',
         howToRead: 'Every entry carries localTime (and localEndTime where it has an end) in the user local '+
           'time zone given above; the numeric when/endedAt are epoch milliseconds for the same instants. '+
-          'dailyContext has one row per calendar day, and its whatIsKnownAboutActivity field states plainly '+
-          'what may and may not be concluded about that day. Read dailyContext before drawing any '+
-          'conclusion about activity.',
+          'dailyContext has one row per calendar day; its manual activity fields are incomplete by '+
+          'design and its whatIsKnownAboutActivity field says so. Read the healthConnect block before '+
+          'drawing any conclusion about activity or sleep.',
         activityTypes: 'Activity entries name what the user did. Preset meanings: ' +
           'Tennis = sustained exertion with bursts of running; Walking = continuous walking; ' +
           'Standing up = standing, largely stationary, not sedentary but no sustained exertion; ' +
           'Mixed = a mixture of walking, standing and sitting down with no sustained exertion, such as ' +
           'playing with children — light intermittent activity, neither sedentary time nor a workout. ' +
           'Any other name was typed by the user. Each activity row also carries activityDescription.',
-        posture: 'Treat the whole interval of every sleep entry, from "when" to "endedAt", as LYING DOWN ' +
-          '(each sleep entry also carries posture: "lying down"). Outside those intervals and outside ' +
-          'activity entries, the user was sitting. Do not count sleep hours as sedentary waking time, ' +
-          'and when judging how long the user was upright or moving on a given day, exclude sleep intervals.',
+        posture: 'Treat the whole interval of every LOGGED sleep entry, from "when" to "endedAt", as lying ' +
+          'down (each carries posture: "lying down"). Outside logged intervals, posture is UNKNOWN from ' +
+          'this file — get it from Health Connect. Do not count logged sleep as sedentary waking time.',
         doseModel: 'Food ingredients carry a dose in servings, where 1.0 is a standalone portion. ' +
           'Composite foods contribute fractions — the onion inside ketchup is about 0.04 servings. ' +
           'Do not treat a trace as a real exposure.'
       },
-      timezone:(function(){ try{ return Intl.DateTimeFormat().resolvedOptions().timeZone; }catch(e){ return ''; } })(),
-      timezoneOffsetMinutes:-new Date().getTimezoneOffset(),
-      dailyContext:dailyContext(),
+      timezone:tzName,
+      timezoneOffsetMinutes:tzOff,
+      dailyContext:dayRows,
       apiKey:getKey(), recipes:loadRecipes(), entries:exportEntries()};
     var blob=new Blob([JSON.stringify(payload)],{type:'application/json'});
     var a=document.createElement('a');
