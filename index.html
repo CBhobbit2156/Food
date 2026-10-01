@@ -792,7 +792,8 @@ function findRecipe(name){
 }
 
 /* ---------------- state ---------------- */
-var state = {entries:[], composer:null, draft:null, confirming:null, showSettings:false};
+var state = {entries:[], composer:null, draft:null, confirming:null, showSettings:false,
+             ioPanel:null, importNote:null};
 
 /* ---------------- rendering ---------------- */
 function footerHTML(){
@@ -1000,7 +1001,7 @@ function settingsHTML(){
     '<div class="tiny muted" style="margin-top:10px;line-height:1.5">'+
       'Without a key the diary still works and the statistics still run — only ingredient lookup and the written interpretation need it. '+
       'Get one at console.anthropic.com; it bills separately from a Claude subscription.</div>'+
-    '<div id="iopanel"></div>'+
+    '<div id="iopanel">'+(state.ioPanel==='import'?importPanelHTML():'')+'</div>'+
     estimateHTML()+recipeListHTML()+'</div>';
 }
 
@@ -1075,6 +1076,63 @@ function estimateHTML(){
     'Download a backup first.</p>'+
     '<button class="mini" data-act="estimate">Estimate amounts for '+n+' '+(n===1?'entry':'entries')+'</button>'+
     '<div id="estNote" class="note faint"></div></div>';
+}
+
+/* One import path for both the file picker and the paste box. The outcome is
+   stored on state because render() rebuilds the settings panel, which used to
+   wipe the message before anyone saw it. */
+function importBackupText(text){
+  var parsed=JSON.parse(text);
+  var arr, restored=[];
+  if(Array.isArray(parsed)) arr=parsed;
+  else if(parsed && Array.isArray(parsed.entries)){
+    arr=parsed.entries;
+    if(parsed.recipes && typeof parsed.recipes==='object'){
+      var cur=loadRecipes(), rn=0;
+      Object.keys(parsed.recipes).forEach(function(k){ cur[k]=parsed.recipes[k]; rn++; });
+      saveRecipes(cur); if(rn) restored.push(rn+' recipe'+(rn===1?'':'s'));
+    }
+    if(parsed.apiKey){ setKey(parsed.apiKey); restored.push('API key'); }
+  }
+  else throw new Error('That file is not a diary backup.');
+  var byId={}, before=state.entries.length;
+  state.entries.forEach(function(e){ byId[e.id]=e; });
+  arr.map(migrate).filter(Boolean).forEach(function(e){ if(e.id) byId[e.id]=e; });
+  state.entries=Object.keys(byId).map(function(k){ return byId[k]; });
+  var added=state.entries.length-before;
+  restored.unshift(arr.length+' entries in file, '+added+' new, '+(arr.length-added)+' already here');
+  saveEntries();
+  return 'Restored '+restored.join(' · ')+'.';
+}
+
+function importFromFile(file){
+  if(!file) return;
+  var reader=new FileReader();
+  reader.onload=function(ev){
+    try{ state.importNote={ok:true, text:importBackupText(String(ev.target.result))}; }
+    catch(err){ state.importNote={ok:false, text:String(err.message||err)}; }
+    state.showSettings=true; state.ioPanel='import'; render();
+  };
+  reader.onerror=function(){
+    state.importNote={ok:false, text:'Could not read that file.'};
+    state.showSettings=true; state.ioPanel='import'; render();
+  };
+  reader.readAsText(file);
+}
+
+function importPanelHTML(){
+  var note=state.importNote;
+  return '<div style="margin-top:10px">'+
+    '<label class="mini" style="display:inline-block;cursor:pointer">Choose backup file…'+
+      '<input type="file" id="importFile" accept=".json,application/json" style="display:none"></label>'+
+    '<div class="tiny muted" style="margin-top:6px;line-height:1.5">Pick the .json you downloaded from '+
+      'Backup. Entries already here are kept; matching ones are updated.</div>'+
+    (note?'<div class="note '+(note.ok?'ok':'bad')+'" style="margin-top:6px">'+esc(note.text)+'</div>':'')+
+    '<details style="margin-top:10px"><summary class="tiny" style="color:var(--muted);cursor:pointer">'+
+      'Or paste the text instead</summary>'+
+      '<textarea id="importBox" placeholder="Paste exported JSON here" style="margin-top:6px"></textarea>'+
+      '<button class="mini" data-act="doImport" style="margin-top:6px">Load pasted text</button>'+
+    '</details></div>';
 }
 
 function recipeListHTML(){
@@ -1889,6 +1947,12 @@ function renderModal(){
 }
 
 /* ---------------- events ---------------- */
+document.addEventListener('change', function(ev){
+  if(ev.target && ev.target.id==='importFile' && ev.target.files && ev.target.files[0]){
+    importFromFile(ev.target.files[0]);
+  }
+});
+
 document.addEventListener('click', function(ev){
   var t=ev.target.closest('[data-act]'); if(!t) return;
   var act=t.getAttribute('data-act'), id=t.getAttribute('data-id'), val=t.getAttribute('data-val');
@@ -2082,36 +2146,15 @@ document.addEventListener('click', function(ev){
     a.click();
   }
   else if(act==='import'){
-    var p=document.getElementById('iopanel');
-    p.innerHTML='<div style="margin-top:10px"><textarea id="importBox" placeholder="Paste exported JSON here"></textarea>'+
-      '<button class="mini" data-act="doImport" style="margin-top:6px">Load these entries</button>'+
-      '<div id="importNote" class="note faint"></div></div>';
+    state.ioPanel = state.ioPanel==='import' ? null : 'import';
+    state.importNote=null;
+    render();
   }
   else if(act==='doImport'){
-    var note2=document.getElementById('importNote');
-    try{
-      var parsed=JSON.parse(document.getElementById('importBox').value);
-      var arr, restored=[];
-      if(Array.isArray(parsed)) arr=parsed;
-      else if(parsed && Array.isArray(parsed.entries)){
-        arr=parsed.entries;
-        if(parsed.recipes && typeof parsed.recipes==='object'){
-          var cur=loadRecipes(), n=0;
-          Object.keys(parsed.recipes).forEach(function(k){ cur[k]=parsed.recipes[k]; n++; });
-          saveRecipes(cur); if(n) restored.push(n+' recipes');
-        }
-        if(parsed.apiKey){ setKey(parsed.apiKey); restored.push('API key'); }
-      }
-      else throw new Error('not a diary backup');
-      var byId={};
-      state.entries.forEach(function(e){ byId[e.id]=e; });
-      arr.map(migrate).filter(Boolean).forEach(function(e){ if(e.id) byId[e.id]=e; });
-      state.entries=Object.keys(byId).map(function(k){ return byId[k]; });
-      restored.unshift(arr.length+' entries');
-      saveEntries(); render();
-      var n3=document.getElementById('importNote');
-      if(n3){ n3.className='note ok'; n3.textContent='Restored '+restored.join(', ')+'.'; }
-    }catch(err){ if(note2){ note2.className='note bad'; note2.textContent=String(err.message||err); } }
+    var box=document.getElementById('importBox');
+    try{ state.importNote={ok:true, text:importBackupText(box?box.value:'')}; }
+    catch(err){ state.importNote={ok:false, text:String(err.message||err)}; }
+    render();
   }
   else if(act==='analyze'){ analysis.state='idle'; analysis.result=null; renderModal(); runAnalysis(); }
   else if(act==='closeModal'){ document.getElementById('modal').innerHTML=''; }
